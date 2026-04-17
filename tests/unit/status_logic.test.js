@@ -1,5 +1,5 @@
 const assert = require('assert');
-const { checkPageStatus } = require('../src/index.js');
+const { checkPageStatus } = require('../../src/index.js');
 
 /**
  * Mock Page Object

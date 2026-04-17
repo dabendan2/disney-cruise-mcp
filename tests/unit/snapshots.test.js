@@ -1,7 +1,7 @@
 const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
-const { checkPageStatus } = require('../src/automation/session');
+const { checkPageStatus } = require('../../src/automation/session');
 
 /**
  * These tests use real HTML snapshots saved during actual browser runs
@@ -11,7 +11,7 @@ const { checkPageStatus } = require('../src/automation/session');
 async function runSnapshotTests() {
     console.log("🚀 Starting Reality-Check Tests (Saved HTML Snapshots)...");
 
-    const resDir = path.join(__dirname, 'res');
+    const resDir = path.join(__dirname, '../res');
 
     // Test 1: Activity List Page (Logged In)
     try {

@@ -1,5 +1,5 @@
 const assert = require('assert');
-const { getActivityDetails } = require('../src/index.js');
+const { getActivityDetails } = require('../../src/index.js');
 
 /**
  * This is a mocked integration test for the activity detail logic.

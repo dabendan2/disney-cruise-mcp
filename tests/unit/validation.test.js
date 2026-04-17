@@ -1,5 +1,5 @@
 const assert = require('assert');
-const { validateArgs } = require('../src/utils/validation');
+const { validateArgs } = require('../../src/utils/validation');
 
 async function testValidation() {
     console.log("🚀 Testing Input Validation...");

@@ -2,12 +2,12 @@
  * E2E Test: Fetch Japanese Steakhouse availability and validate against baseline.
  * This test uses real browser automation via CDP and compares results with tests/res/e2e_results_japanese_steakhouse.json.
  */
-const { getActivityDetails } = require('../src/automation/activities');
+const { getActivityDetails } = require('../../src/automation/activities');
 const fs = require('fs');
 const path = require('path');
 const http = require('http');
 const assert = require('assert');
-require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
+require('dotenv').config({ path: path.join(__dirname, '..', '..', '.env') });
 
 async function checkCDPConnection() {
     return new Promise((resolve) => {
@@ -50,7 +50,7 @@ async function runE2EJapaneseSteakhouse() {
     }
     console.log("✅ CDP connection verified.");
 
-    const expectedPath = path.join(__dirname, 'res', 'e2e_results_japanese_steakhouse.json');
+    const expectedPath = path.join(__dirname, '../res', 'e2e_results_japanese_steakhouse.json');
     if (!fs.existsSync(expectedPath)) {
         throw new Error(`STRICT FAIL: Expected results file not found at ${expectedPath}`);
     }

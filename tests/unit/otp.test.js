@@ -1,10 +1,10 @@
 const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
-const { MailOTP } = require('../src/utils/otp');
+const { MailOTP } = require('../../src/utils/otp');
 
 // Mock setup
-const tokenPath = path.join(__dirname, 'res', 'mock_google_token.json');
+const tokenPath = path.join(__dirname, '../res', 'mock_google_token.json');
 
 function setupMockToken(content) {
     if (!fs.existsSync(path.dirname(tokenPath))) fs.mkdirSync(path.dirname(tokenPath), { recursive: true });
@@ -83,7 +83,7 @@ async function runOTPTests() {
 
     // Test 4: Real Sample
     try {
-        const sample = fs.readFileSync(path.join(__dirname, 'res', 'dcl_otp_email.html'), 'utf8');
+        const sample = fs.readFileSync(path.join(__dirname, '../res', 'dcl_otp_email.html'), 'utf8');
         global.fetch = async (url) => {
             if (url.includes('/messages?')) return { ok: true, json: async () => ({ messages: [{ id: "real" }] }) };
             if (url.includes('/messages/real')) return { ok: true, json: async () => ({ payload: { parts: [{ mimeType: 'text/html', body: { data: Buffer.from(sample).toString('base64') } }] } }) };

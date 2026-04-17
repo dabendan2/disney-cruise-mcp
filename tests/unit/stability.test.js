@@ -1,5 +1,5 @@
 const assert = require('assert');
-const { waitForAngular } = require('../src/index.js');
+const { waitForAngular } = require('../../src/index.js');
 
 /**
  * Mock Page for Stability Tests

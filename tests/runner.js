@@ -2,9 +2,10 @@ const { spawnSync } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 
-const testDir = __dirname;
+const testDir = process.argv[2] ? path.resolve(process.argv[2]) : __dirname;
 const files = fs.readdirSync(testDir).filter(f => f.endsWith('.test.js'));
 
+console.log(`🔍 Scanning directory: ${testDir}`);
 console.log(`🔍 Found ${files.length} test suites...\n`);
 
 let passedCount = 0;

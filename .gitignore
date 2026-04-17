@@ -1,0 +1,4 @@
+node_modules/
+.env
+*.bak
+tests/runner.js

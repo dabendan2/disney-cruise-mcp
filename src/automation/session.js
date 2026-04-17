@@ -1,6 +1,7 @@
 const { logTime, saveDebug } = require('../utils/debug');
 const { MailOTP } = require('../utils/otp');
 const { URLS, SELECTORS, ERROR_INDICATORS, AUTH_MARKERS } = require('../constants');
+const fs = require('fs');
 
 const otpService = new MailOTP();
 
@@ -18,8 +19,8 @@ async function checkPageStatus(page, reservationId) {
 
     logTime(`[CHECK] URL: ${url}`);
 
-    if (ERROR_INDICATORS.some(text => content.includes(text)) || title === "404") {
-        throw new Error(`STRICT FAIL: DCL 404 Error (Stitch). URL: ${url}`);
+    if (ERROR_INDICATORS.some(text => content.includes(text)) || title === "404" || url.includes("null/null/null")) {
+        return "STITCH_ERROR";
     }
 
     const isLoggedIn = AUTH_MARKERS.some(marker => content.includes(marker));
@@ -44,7 +45,15 @@ async function checkPageStatus(page, reservationId) {
         }
 
         const emailInput = frame.locator(SELECTORS.LOGIN_INPUTS.join(', ')).first();
-        if (await emailInput.isVisible({ timeout: 1500 }).catch(() => false)) {
+        const passwordInput = frame.locator(SELECTORS.PASSWORD_INPUTS.join(', ')).first();
+        
+        const emailVisible = await emailInput.isVisible({ timeout: 1000 }).catch(() => false);
+        const passwordVisible = await passwordInput.isVisible({ timeout: 1000 }).catch(() => false);
+
+        if (emailVisible && passwordVisible) {
+            return "LOGIN_SCREEN_BOTH";
+        }
+        if (emailVisible) {
             return "LOGIN_SCREEN";
         }
     }
@@ -52,8 +61,7 @@ async function checkPageStatus(page, reservationId) {
     if (url.includes("/login")) return "LOGIN_SCREEN";
     if (url === "about:blank" || url.includes("chrome://")) return "NEED_LOGIN";
 
-    const path = await saveDebug(page, "unknown_status");
-    throw new Error(`STRICT FAIL: Unexpected Page State. URL: ${url}, Evidence: ${path}`);
+    return "UNKNOWN";
 }
 
 async function ensureLogin(page, reservationId) {
@@ -63,8 +71,8 @@ async function ensureLogin(page, reservationId) {
     const frameElement = page.locator(SELECTORS.ONEID_IFRAME);
     const frame = page.frameLocator(SELECTORS.ONEID_IFRAME);
 
-    if (status !== "OTP_SCREEN" && status !== "LOGIN_SCREEN") {
-        logTime("Redirecting to login...");
+    if (status === "STITCH_ERROR" || (status !== "OTP_SCREEN" && status !== "LOGIN_SCREEN" && status !== "LOGIN_SCREEN_BOTH")) {
+        logTime("Redirecting to login (due to Stitch error or session loss)...");
         await page.goto(URLS.LOGIN, { waitUntil: 'domcontentloaded', timeout: 60000 });
         await frameElement.waitFor({ state: 'visible', timeout: 35000 }).catch(async () => {
             const path = await saveDebug(page, "login_iframe_timeout");
@@ -73,8 +81,20 @@ async function ensureLogin(page, reservationId) {
         status = await checkPageStatus(page, reservationId);
     }
 
-    if (status === "LOGIN_SCREEN") {
-        logTime("Submitting credentials...");
+    if (status === "LOGIN_SCREEN_BOTH") {
+        logTime("Submitting credentials (Combined Screen)...");
+        const emailInput = frame.locator(SELECTORS.LOGIN_INPUTS.join(', ')).first();
+        const passwordInput = frame.locator(SELECTORS.PASSWORD_INPUTS.join(', ')).first();
+        const submitBtn = frame.locator(SELECTORS.SUBMIT_BUTTON).first();
+
+        await emailInput.fill(process.env.DISNEY_EMAIL);
+        await passwordInput.fill(process.env.DISNEY_PASSWORD);
+        await submitBtn.click();
+        
+        await new Promise(r => setTimeout(r, 6000));
+        status = await checkPageStatus(page, reservationId);
+    } else if (status === "LOGIN_SCREEN") {
+        logTime("Submitting credentials (Step-by-Step)...");
         const emailInput = frame.locator(SELECTORS.LOGIN_INPUTS.join(', ')).first();
         const passwordInput = frame.locator(SELECTORS.PASSWORD_INPUTS.join(', ')).first();
         const submitBtn = frame.locator(SELECTORS.SUBMIT_BUTTON).first();
@@ -88,7 +108,7 @@ async function ensureLogin(page, reservationId) {
         
         await passwordInput.waitFor({ state: 'visible', timeout: 25000 }).catch(async () => {
             const path = await saveDebug(page, "password_input_timeout");
-            throw new Error(`STRICT FAIL: Password input timeout (invalid email?). Evidence: ${path}`);
+            throw new Error(`STRICT FAIL: Password input timeout. Evidence: ${path}`);
         });
         
         await passwordInput.fill(process.env.DISNEY_PASSWORD);
@@ -99,21 +119,22 @@ async function ensureLogin(page, reservationId) {
     }
 
     if (status === "OTP_SCREEN") {
-        const code = await otpService.poll();
-
-        if (code) {
+        logTime("[OTP] MFA Screen detected. Polling via MailOTP...");
+        const otpInput = frame.locator(SELECTORS.OTP_INPUTS.join(', ')).first();
+        const submitBtn = frame.locator(SELECTORS.SUBMIT_BUTTON).first();
+        
+        try {
+            const code = await otpService.poll(300000); // 5 min poll
             logTime(`[OTP] Applying code: ${code}`);
-            const otpInput = frame.locator(SELECTORS.OTP_INPUTS.join(', ')).first();
-            const submitBtn = frame.locator(SELECTORS.SUBMIT_BUTTON).first();
             await otpInput.fill(code);
             await submitBtn.click();
             await frameElement.waitFor({ state: 'hidden', timeout: 40000 }).catch(async () => {
                 const path = await saveDebug(page, "otp_submit_hang");
                 throw new Error(`STRICT FAIL: Page hung after OTP submission. Evidence: ${path}`);
             });
-        } else {
-            const path = await saveDebug(page, "otp_timeout");
-            throw new Error(`STRICT FAIL: OTP polling timeout via internal Gmail API. Evidence: ${path}`);
+        } catch (e) {
+            const path = await saveDebug(page, "otp_failure");
+            throw new Error(`STRICT FAIL: OTP process failed: ${e.message}. Evidence: ${path}`);
         }
     }
 

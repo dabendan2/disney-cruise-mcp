@@ -4,7 +4,7 @@ const { checkPageStatus } = require('../src/index.js');
 /**
  * Mock Page Object
  */
-function createMockPage({ url, content, title, iframeVisible, otpVisible, loginVisible, errorText }) {
+function createMockPage({ url, content, title, iframeVisible, otpVisible, loginVisible, passwordVisible, errorText }) {
     return {
         url: () => url || "https://example.com",
         content: async () => content || "<html></html>",
@@ -19,6 +19,7 @@ function createMockPage({ url, content, title, iframeVisible, otpVisible, loginV
                 isVisible: async () => {
                     if (selector.includes('tel') || selector.includes('OTP')) return !!otpVisible;
                     if (selector.includes('email') || selector.includes('LoginValue')) return !!loginVisible;
+                    if (selector.includes('password') || selector.includes('Password')) return !!passwordVisible;
                     return false;
                 }
             })
@@ -30,6 +31,7 @@ function createMockPage({ url, content, title, iframeVisible, otpVisible, loginV
                     isVisible: async () => {
                         if (s.includes('tel') || s.includes('OTP')) return !!otpVisible;
                         if (s.includes('email') || s.includes('LoginValue')) return !!loginVisible;
+                        if (s.includes('password') || s.includes('Password')) return !!passwordVisible;
                         return false;
                     }
                 })
@@ -103,6 +105,14 @@ async function runTests() {
         assert.strictEqual(status, "NEED_LOGIN", "Should detect NEED_LOGIN for chrome:// URLs");
         console.log("✅ Test 7 Passed: New Tab Detection");
     } catch (e) { console.error("❌ Test 7 Failed:", e.message); }
+
+    // Test 8: Combined Login Screen Detection (LOGIN_SCREEN_BOTH)
+    try {
+        const page = createMockPage({ iframeVisible: true, loginVisible: true, passwordVisible: true });
+        const status = await checkPageStatus(page);
+        assert.strictEqual(status, "LOGIN_SCREEN_BOTH", "Should detect combined login screen as LOGIN_SCREEN_BOTH");
+        console.log("✅ Test 8 Passed: Combined Login Detection as LOGIN_SCREEN_BOTH");
+    } catch (e) { console.error("❌ Test 8 Failed:", e.message); }
 
     console.log("\n🏁 All Status Logic Tests Completed.");
 }

@@ -13,7 +13,7 @@ const { navigateUrl } = require('./automation/navigation');
 const { waitForAngular } = require('./browser/stability');
 
 const server = new Server(
-  { name: "disney-cruise-automation", version: "1.6.1" },
+  { name: "disney-cruise-automation", version: "1.7.0" },
   { capabilities: { tools: {} } }
 );
 

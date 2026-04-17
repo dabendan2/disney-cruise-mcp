@@ -5,7 +5,12 @@ module.exports = {
     },
     SELECTORS: {
         ONEID_IFRAME: '#oneid-iframe',
-        OTP_INPUTS: ['input[type="tel"]', '#InputOTP', '[aria-label*="code"]'],
+        OTP_INPUTS: [
+            'input[type="tel"]', 
+            'input#InputOTP', 
+            'input[aria-label*="code" i]', 
+            'input[aria-label*="passcode" i]'
+        ],
         LOGIN_INPUTS: ['input[type="email"]', '#InputLoginValue'],
         PASSWORD_INPUTS: ['input[type="password"]', '#InputPassword'],
         SUBMIT_BUTTON: '#BtnSubmit',

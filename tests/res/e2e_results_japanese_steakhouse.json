@@ -1,22 +1,51 @@
 [
   {
+    "activityName": "Japanese Steakhouse",
     "date": "2026-04-23",
-    "status": "ERROR",
-    "error": "STRICT FAIL: DCL 404 Error (Stitch). URL: https://disneycruise.disney.go.com/my-disney-cruise/null/null/null/?ship=DA&port=SIN"
+    "status": "Available",
+    "times": [
+      "7:45 PM",
+      "8:00 PM",
+      "8:30 PM"
+    ],
+    "timing": {
+      "total_sec": 32.702
+    }
   },
   {
+    "activityName": "Japanese Steakhouse",
     "date": "2026-04-24",
-    "status": "ERROR",
-    "error": "STRICT FAIL: DCL 404 Error (Stitch). URL: https://disneycruise.disney.go.com/my-disney-cruise/null/null/null/?ship=DA&port=SIN"
+    "status": "Available",
+    "times": [
+      "6:00 PM",
+      "7:45 PM",
+      "8:30 PM"
+    ],
+    "timing": {
+      "total_sec": 41.537
+    }
   },
   {
+    "activityName": "Japanese Steakhouse",
     "date": "2026-04-25",
-    "status": "ERROR",
-    "error": "STRICT FAIL: DCL 404 Error (Stitch). URL: https://disneycruise.disney.go.com/my-disney-cruise/null/null/null/?ship=DA&port=SIN"
+    "status": "Available",
+    "times": [
+      "6:00 PM",
+      "6:30 PM",
+      "6:45 PM",
+      "8:00 PM",
+      "8:30 PM"
+    ],
+    "timing": {
+      "total_sec": 32.72
+    }
   },
   {
+    "activityName": "Japanese Steakhouse",
     "date": "2026-04-26",
-    "status": "ERROR",
-    "error": "STRICT FAIL: DCL 404 Error (Stitch). URL: https://disneycruise.disney.go.com/my-disney-cruise/null/null/null/?ship=DA&port=SIN"
+    "status": "Onboard Only",
+    "timing": {
+      "total_sec": 21.705
+    }
   }
 ]

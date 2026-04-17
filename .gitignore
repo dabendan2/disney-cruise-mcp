@@ -1,4 +1,19 @@
+# Dependencies
 node_modules/
+
+# Credentials
 .env
+
+# Debug Artifacts (Strict Evidence)
+*.png
+*.html
+*.log
+/home/ubuntu/.hermes/debug/*
+
+# OS Files
+.DS_Store
+Thumbs.db
+
+# Backup and Temp
 *.bak
-tests/runner.js
+*.tmp

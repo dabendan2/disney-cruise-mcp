@@ -1,0 +1,22 @@
+[
+  {
+    "date": "2026-04-23",
+    "status": "ERROR",
+    "error": "STRICT FAIL: DCL 404 Error (Stitch). URL: https://disneycruise.disney.go.com/my-disney-cruise/null/null/null/?ship=DA&port=SIN"
+  },
+  {
+    "date": "2026-04-24",
+    "status": "ERROR",
+    "error": "STRICT FAIL: DCL 404 Error (Stitch). URL: https://disneycruise.disney.go.com/my-disney-cruise/null/null/null/?ship=DA&port=SIN"
+  },
+  {
+    "date": "2026-04-25",
+    "status": "ERROR",
+    "error": "STRICT FAIL: DCL 404 Error (Stitch). URL: https://disneycruise.disney.go.com/my-disney-cruise/null/null/null/?ship=DA&port=SIN"
+  },
+  {
+    "date": "2026-04-26",
+    "status": "ERROR",
+    "error": "STRICT FAIL: DCL 404 Error (Stitch). URL: https://disneycruise.disney.go.com/my-disney-cruise/null/null/null/?ship=DA&port=SIN"
+  }
+]

@@ -3,14 +3,9 @@ const { Server } = require("@modelcontextprotocol/sdk/server/index.js");
 const { StdioServerTransport } = require("@modelcontextprotocol/sdk/server/stdio.js");
 const { CallToolRequestSchema, ListToolsRequestSchema } = require("@modelcontextprotocol/sdk/types.js");
 
-// Import modules
 const { withLock } = require('./utils/concurrency');
 const { getActivityDetails, getAllActivityTypes, getMyPlans, getActivityList, addActivity } = require('./automation/activities');
-
-// Export for tests if needed
-const { checkLoginStatus, ensureLogin, verifySession } = require('./automation/session');
-const { navigateUrl } = require('./automation/navigation');
-const { waitForAngular } = require('./browser/stability');
+const { verifySession } = require('./automation/session');
 
 const server = new Server(
   { name: "disney-cruise-automation", version: "2.0.0" },
@@ -46,7 +41,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     },
     { 
       name: "get_my_plans", 
-      description: "Auto-detect the first available reservation from the dashboard and fetch its daily itinerary and planned activities. Returns metadata (reservationId, stateroom) plus plans.", 
+      description: "Auto-detect the first available reservation from the dashboard and fetch its daily itinerary and planned activities.", 
       inputSchema: { 
         type: "object", 
         properties: {}
@@ -128,20 +123,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     }
   });
 });
-
-module.exports = { 
-  checkLoginStatus, 
-  ensureLogin, 
-  verifySession,
-  navigateUrl, 
-  getActivityDetails,
-  getAllActivityTypes,
-  getMyPlans,
-  getActivityList,
-  addActivity,
-  waitForAngular 
-};
-
 
 (async () => {
   if (require.main === module) {

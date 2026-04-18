@@ -14,9 +14,18 @@ module.exports = {
         LOGIN_INPUTS: ['input[type="email"]', '#InputLoginValue'],
         PASSWORD_INPUTS: ['input[type="password"]', '#InputPassword'],
         SUBMIT_BUTTON: '#BtnSubmit',
-        ERROR_MESSAGES: ['.error', '#error', '[role="alert"]'],
+        ERROR_MESSAGES: [
+            '#warning-messaging-title',
+            '.error-message',
+            '[role="alert"]',
+            '.warning-messaging-title',
+            '.error',
+            '#error'
+        ].join(', '),
         GUEST_CHECKBOX: 'label.btn-checkbox-label',
-        ACTIVITY_CARD: 'wdpr-activity-card'
+        ACTIVITY_CARD: 'wdpr-activity-card',
+        SAVE_BUTTON: 'button, .cta-button',
+        SELECT_ADD_BUTTON: 'button, a.btn'
     },
     ERROR_INDICATORS: [
         "Someone Ate the Page!",

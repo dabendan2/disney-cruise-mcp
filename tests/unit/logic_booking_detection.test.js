@@ -2,7 +2,7 @@ const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
 const { chromium } = require('playwright-chromium');
-const { SELECTORS: UI_SELECTORS } = require('../../src/utils/ui_logic');
+const { SELECTORS: UI_SELECTORS } = require('../../src/constants');
 
 /**
  * Unit Test: Booking Result Detection Logic

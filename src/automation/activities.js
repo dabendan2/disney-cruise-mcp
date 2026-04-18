@@ -397,11 +397,33 @@ async function addActivity(reservationId, slug, date, activityName, timeSlot) {
         }
         await page.locator('button').filter({ hasText: /Check Availability/i }).first().click();
         
+        // 2.5 Quick Conflict Check (after Check Availability)
+        await page.waitForTimeout(6000);
+        const postCheckText = await card.innerText();
+        logTime(`[ADD_ACTIVITY] Post-check text length: ${postCheckText.length}`);
+        logTime(`[ADD_ACTIVITY] Post-check text preview: ${postCheckText.substring(0, 300).replace(/\s+/g, ' ')}`);
+        if (isBookingConflict(postCheckText)) {
+            logTime(`[ADD_ACTIVITY] Conflict detected! Text contains keywords.`);
+            return {
+                activityName,
+                timeSlot,
+                status: "ALREADY_BOOKED",
+                message: "Activity is already booked or has a conflict.",
+                evidence: await saveDebug(page, "already_booked_immediate"),
+                timing: { total_sec: (Date.now() - start)/1000 }
+            };
+        } else {
+            logTime(`[ADD_ACTIVITY] No conflict detected in text.`);
+        }
+        
         // 3. Handle Time Dropdown
         const dropdown = page.locator('button, [role="button"], .dropdown-toggle').filter({ hasText: /Select Time/i }).first();
         if (await dropdown.isVisible({ timeout: 5000 }).catch(() => false)) {
-            logTime("Clicking Select Time dropdown (JS forced)...");
-            await dropdown.evaluate(el => el.click());
+            logTime("Clicking Select Time dropdown...");
+            await dropdown.click().catch(async () => {
+                logTime("Normal click failed, forcing JS click on dropdown...");
+                await dropdown.evaluate(el => el.click());
+            });
             await page.waitForTimeout(3000); 
         }
         
@@ -418,7 +440,7 @@ async function addActivity(reservationId, slug, date, activityName, timeSlot) {
             );
             
             if (isDisabled) {
-                logTime(`[ADD_ACTIVITY] Slot ${timeSlot} is DISABLED. This usually means it is already booked or there is a conflict.`);
+                logTime(`[ADD_ACTIVITY] Slot ${timeSlot} is DISABLED.`);
                 const cardText = await card.innerText();
                 if (isBookingConflict(cardText)) {
                     return {
@@ -431,26 +453,50 @@ async function addActivity(reservationId, slug, date, activityName, timeSlot) {
                     };
                 }
             }
+            
+            logTime(`Clicking slot: ${timeSlot}`);
+            await slot.click().catch(async () => {
+                logTime("Normal slot click failed, forcing JS click...");
+                await slot.evaluate(el => el.click());
+            });
+            await page.waitForTimeout(2000);
         } catch (e) {
-            logTime("Slot not visible, attempting JS click on hidden element...");
+            logTime(`Slot ${timeSlot} not found or not visible: ${e.message}`);
+            // Fallback: try JS click on anything matching text
+            await page.evaluate((ts) => {
+                const elements = Array.from(document.querySelectorAll('li[role="option"], .option-link, button, span'));
+                const found = elements.find(el => el.innerText.trim().toLowerCase() === ts.toLowerCase());
+                if (found) found.click();
+            }, timeSlot);
+            await page.waitForTimeout(2000);
         }
-        await slot.evaluate(el => el.click());
-        await page.waitForTimeout(2000);
         
         // 5. Final Commit
         logTime("Attempting to click SAVE...");
-        const saveBtn = page.locator('button, .cta-button').filter({ hasText: /^Save$/i }).first();
+        await card.scrollIntoViewIfNeeded();
+        const saveBtn = card.locator('button, .cta-button, a.btn').filter({ hasText: /Save/i }).first();
+        
+        // Wait for button to be enabled (SPA state update)
         try {
-            await saveBtn.waitFor({ state: 'visible', timeout: 5000 });
-            await saveBtn.click();
+            await saveBtn.waitFor({ state: 'visible', timeout: 10000 });
+            for (let i = 0; i < 5; i++) {
+                const isEnabled = await saveBtn.evaluate(el => !el.hasAttribute('disabled') && !el.classList.contains('disabled'));
+                if (isEnabled) break;
+                logTime("Waiting for SAVE button to enable...");
+                await page.waitForTimeout(2000);
+            }
+            await saveBtn.click({ timeout: 5000 });
         } catch (e) {
-            logTime("Save button visibility check failed, attempting JS click anyway...");
-            await page.evaluate(() => {
-                const btns = Array.from(document.querySelectorAll('button, .cta-button, a'));
-                const save = btns.find(b => b.innerText.trim() === 'Save');
-                if (save) save.click();
-                else throw new Error("Save button not found in DOM");
-            });
+            logTime(`Save button interaction failed: ${e.message}. Attempting direct JS click...`);
+            await page.evaluate((activityName) => {
+                const card = Array.from(document.querySelectorAll('wdpr-activity-card'))
+                    .find(c => c.innerText.toLowerCase().includes(activityName.toLowerCase()));
+                if (card) {
+                    const btns = Array.from(card.querySelectorAll('button, .cta-button, a'));
+                    const save = btns.find(b => b.innerText.trim().toLowerCase() === 'save');
+                    if (save) save.click();
+                }
+            }, activityName);
         }
         
         // 6. Monitor Result (Wait for redirect or error message)
@@ -464,6 +510,26 @@ async function addActivity(reservationId, slug, date, activityName, timeSlot) {
                 return { success: false, msg: fullText.trim() };
             })
         ]).catch(() => ({ success: false, msg: "Timeout waiting for confirmation result" }));
+
+        if (result.success) {
+            logTime("Booking success detected. Waiting for itinerary to render...");
+            try {
+                // Wait for the itinerary container to appear
+                await page.waitForSelector('day-view, activity-card', { timeout: 20000 });
+                // Give it a bit more time for names and details to populate
+                await page.waitForTimeout(10000);
+                
+                // Try to find and scroll to the booked activity for the screenshot
+                const activityLocator = page.locator('activity-card').filter({ hasText: new RegExp(activityName, "i") }).first();
+                if (await activityLocator.isVisible()) {
+                    logTime(`Scrolling to activity: ${activityName}`);
+                    await activityLocator.scrollIntoViewIfNeeded();
+                    await page.waitForTimeout(2000); // Wait for scroll animation
+                }
+            } catch (renderErr) {
+                logTime(`Warning: Failed to scroll to activity in itinerary: ${renderErr.message}`);
+            }
+        }
 
         const finalPath = await saveDebug(page, result.success ? "booking_SUCCESS" : "booking_FAILURE");
         

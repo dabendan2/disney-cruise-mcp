@@ -21,7 +21,9 @@ jobs:
       - name: Install dependencies
         run: npm install
       - name: Create dummy .env for unit tests
-        run: echo "DISNEY_EMAIL=test@example.com\nDISNEY_PASSWORD=test" > .env
+        run: |
+          echo "DISNEY_EMAIL=test@example.com" > .env
+          echo "DISNEY_PASSWORD=password123" >> .env
       - name: Run Unit Tests
         run: npm run test:unit
 
@@ -45,7 +47,6 @@ jobs:
         run: |
           echo "DISNEY_EMAIL=${{ secrets.DISNEY_EMAIL }}" >> .env
           echo "DISNEY_PASSWORD=${{ secrets.DISNEY_PASSWORD }}" >> .env
-          # Gmail token for MailOTP would also be needed if not using mock
       - name: Start Background Chrome with CDP
         run: |
           nohup npx playwright launch-server --browser chromium --port 9222 &

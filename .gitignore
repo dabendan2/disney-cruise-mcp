@@ -7,6 +7,8 @@ node_modules/
 # Debug Artifacts (Strict Evidence)
 *.png
 *.html
+!tests/res/*.html
+!tests/res/*.png
 *.log
 /home/ubuntu/.hermes/debug/*
 

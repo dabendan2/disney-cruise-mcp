@@ -29,6 +29,10 @@ async function getActivityDetails(reservationId, slug, date, activityName) {
 
         await card.scrollIntoViewIfNeeded();
         const cardText = await card.innerText();
+        const onlyOneGuest = cardText.includes("Book for 1 Guest only");
+        if (onlyOneGuest) {
+            logTime(`[GET_DETAILS] "Book for 1 Guest only" detected. Will check availability for first guest only.`);
+        }
 
         // REFACTORED STATUS CHECK: Button-first logic
         const btn = card.locator('button, a.btn').filter({ hasText: /Select|Add/i }).first();
@@ -64,7 +68,10 @@ async function getActivityDetails(reservationId, slug, date, activityName) {
 
         if (modalOrSlot === 'modal') {
             const guests = page.locator(SELECTORS.GUEST_CHECKBOX);
-            for (let i = 0; i < await guests.count(); i++) { 
+            const count = await guests.count();
+            const toSelect = onlyOneGuest ? Math.min(1, count) : count;
+
+            for (let i = 0; i < toSelect; i++) { 
                 await guests.nth(i).scrollIntoViewIfNeeded();
                 await guests.nth(i).click(); 
                 await new Promise(r => setTimeout(r, 1200)); 
@@ -370,6 +377,12 @@ async function addActivity(reservationId, slug, date, activityName, timeSlot) {
         const card = page.locator('wdpr-activity-card').filter({ hasText: new RegExp(activityName, "i") }).first();
         await card.waitFor({ state: 'visible', timeout: 15000 });
         
+        const cardText = await card.innerText();
+        const onlyOneGuest = cardText.includes("Book for 1 Guest only");
+        if (onlyOneGuest) {
+            logTime(`[ADD_ACTIVITY] "Book for 1 Guest only" detected. Selecting first guest only.`);
+        }
+        
         // 1. Initial Click
         const selectBtn = card.locator('button, a.btn').filter({ hasText: /Select|Add/i }).first();
         await selectBtn.click();
@@ -377,7 +390,10 @@ async function addActivity(reservationId, slug, date, activityName, timeSlot) {
         // 2. Select Guests
         await page.waitForSelector('label.btn-checkbox-label', { timeout: 10000 });
         const guests = page.locator('label.btn-checkbox-label');
-        for (let i = 0; i < await guests.count(); i++) {
+        const count = await guests.count();
+        const toSelect = onlyOneGuest ? Math.min(1, count) : count;
+
+        for (let i = 0; i < toSelect; i++) {
             await guests.nth(i).click();
         }
         await page.locator('button').filter({ hasText: /Check Availability/i }).first().click();

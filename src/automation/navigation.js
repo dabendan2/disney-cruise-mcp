@@ -1,10 +1,10 @@
-const { getPage } = require('../browser/engine');
+const { ensureCdpPage } = require('../browser/engine');
 const { waitForAngular } = require('../browser/stability');
 const { checkPageStatus, ensureLogin } = require('./session');
 const { logTime, saveDebug } = require('../utils/debug');
 
 async function navigateUrl(url, reservationId, waitForSelector = null, timeout = 30000) {
-    const { browser, page } = await getPage();
+    const { browser, page } = await ensureCdpPage();
     try {
         for (let attempt = 1; attempt <= 2; attempt++) {
             logTime(`Nav Attempt ${attempt}: ${url}`);

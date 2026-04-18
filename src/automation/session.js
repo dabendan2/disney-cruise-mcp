@@ -3,7 +3,7 @@ const { MailOTP } = require('../utils/otp');
 const { URLS, SELECTORS, ERROR_INDICATORS, AUTH_MARKERS } = require('../constants');
 const fs = require('fs');
 
-const { getPage } = require('../browser/engine');
+const { ensureCdpPage } = require('../browser/engine');
 
 const otpService = new MailOTP();
 
@@ -197,7 +197,7 @@ async function ensureLogin(page, reservationId) {
 }
 
 async function verifySession(reservationId) {
-    const { browser, page } = await getPage();
+    const { browser, page } = await ensureCdpPage();
     try {
         const result = await ensureLogin(page, reservationId);
         return result;

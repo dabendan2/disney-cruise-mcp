@@ -17,11 +17,11 @@ async function runUnitTests() {
     // A card that contains "Onboard Price" but has a visible "Select" button.
     const htmlFalsePositive = `
         <wdpr-activity-card>
-            <div class=\"activityDetails\">
+            <div class="activityDetails">
                 <h2>Photo: Unlimited Package</h2>
-                <div class=\"description\">Pre-cruise price: $203.95; and Onboard Price: $239.95</div>
-                <div class=\"activityCardColRight\">
-                    <button class=\"btn select-activity-button\">Select</button>
+                <div class="description">Pre-cruise price: $203.95; and Onboard Price: $239.95</div>
+                <div class="activityCardColRight">
+                    <button class="btn select-activity-button">Select</button>
                 </div>
             </div>
         </wdpr-activity-card>
@@ -42,13 +42,13 @@ async function runUnitTests() {
     assert.strictEqual(status1, "Available", "Should correctly identify as Available even with 'Onboard' in text");
     console.log("✅ Test 1 Passed: False positive prevented");
 
-    // SCENARIO 2: Real \"Onboard Only\" (No Button)
+    // SCENARIO 2: Real "Onboard Only" (No Button)
     const htmlRealOnboardOnly = `
         <wdpr-activity-card>
-            <div class=\"activityDetails\">
+            <div class="activityDetails">
                 <h2>Palo Dinner</h2>
-                <div class=\"activityCardColRight\">
-                    <div class=\"onboard-label\">Only available on board</div>
+                <div class="activityCardColRight">
+                    <div class="onboard-label">Only available on board</div>
                 </div>
             </div>
         </wdpr-activity-card>
@@ -68,6 +68,11 @@ async function runUnitTests() {
     const status2 = determineActivityStatus(result2.text, result2.isBtnVisible);
     assert.strictEqual(status2, "Onboard Only", "Should capture Onboard Only status when button is missing");
     console.log("✅ Test 2 Passed: Real onboard status detected");
+
+    // SCENARIO 3: Generic Not Available (No Button, No specific text)
+    const status3 = determineActivityStatus("Coming Soon", false);
+    assert.strictEqual(status3, "Not Available", "Should fallback to Not Available for unrecognized text without button");
+    console.log("✅ Test 3 Passed: Fallback to Not Available");
 
     console.log("\n🏁 Activity Status Logic Tests Completed.");
     await browser.close();

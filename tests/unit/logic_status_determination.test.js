@@ -1,10 +1,17 @@
 const assert = require('assert');
-const { checkLoginStatus } = require('../../src/utils/ui_logic');
 const fs = require('fs');
 const path = require('path');
+const { checkLoginStatus, isBookingConflict, getTargetGuestCount, determineActivityStatus } = require('../../src/utils/ui_logic');
 
 function runTests() {
     console.log('🚀 Running checkLoginStatus logic tests...');
+    
+    // Synthetic tests for code coverage edge cases
+    assert.strictEqual(isBookingConflict(null), false);
+    assert.strictEqual(getTargetGuestCount(null, 4), 4);
+    assert.strictEqual(determineActivityStatus(null, false), 'Not Available');
+    console.log('✅ Basic utils edge cases -> PASSED');
+
     const resDir = path.join(__dirname, '../res');
 
     const testCases = [
@@ -14,6 +21,7 @@ function runTests() {
         { file: 'LOGIN2.DOM.html', expected: 'LOGIN2' },
         { file: 'OTP1.DOM.html', expected: 'OTP1' },
         { file: 'OTP2.html', expected: 'OTP2' },
+        { file: 'PAGE_ERROR.DOM.html', expected: 'PAGE_ERROR' },
         { file: 'activity_list.html', expected: 'UNKNOWN' },
         { file: 'initial_load.html', expected: 'UNKNOWN' }
     ];
@@ -40,6 +48,11 @@ function runTests() {
             failed++;
         }
     }
+
+    // Synthetic tests for text-based fallback
+    assert.strictEqual(checkLoginStatus('<html><body>Check your email for code</body></html>'), 'OTP1');
+    assert.strictEqual(checkLoginStatus('<html><body>Check your email Enter Code</body></html>'), 'OTP2');
+    console.log('✅ Synthetic OTP fallbacks -> PASSED');
 
     assert.strictEqual(checkLoginStatus('<html><body>Hello World</body></html>'), 'UNKNOWN');
     console.log('✅ Random page -> UNKNOWN');

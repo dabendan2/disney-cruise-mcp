@@ -1,6 +1,6 @@
 const { chromium } = require("playwright-chromium");
 
-const CDP_URL = "http://localhost:9222";
+const CDP_URL = "http://127.0.0.1:9222";
 
 async function getPage() {
   const browser = await chromium.connectOverCDP(CDP_URL);

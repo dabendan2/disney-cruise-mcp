@@ -1,71 +1,93 @@
-# Disney Cruise MCP Server
+# Disney Cruise Line (DCL) MCP Server
 
-此專案是為 Disney Cruise Line (DCL) 提供的 Model Context Protocol (MCP) 伺服器，專為資源受限的環境 (如 2GB RAM 的 Ubuntu Server) 進行優化，具備嚴格的報錯機制與自動化測試。
+這是一個專為 **Disney Cruise Line (DCL)** 預訂管理設計的 MCP (Model Context Protocol) 伺服器。它能自動執行登入、繞過 OTP 驗證、掃描航程計畫，並監控特定活動（如 Palo、SPA、Teppanyaki）的預訂狀態。
 
-## 版本資訊
-- **Version**: 1.7.0
-- **核心架構**: 基於 Playwright-Chromium 與 MCP SDK 的模組化架構。
-- **CI/CD**: 已配置 GitHub Actions 自動化測試工作流。
+## 🛠 安裝與環境需求
 
-## 核心特性
+### 1. 系統需求
+*   **Node.js**: v18.0.0 或更高版本。
+*   **瀏覽器**: Playwright Chromium (系統自動調用)。
 
-### 1. 模組化架構 (Modular Design)
-- **src/index.js**: MCP 伺服器入口點。
-- **src/automation/**: 封裝登入、導航與活動爬取邏輯。
-- **src/browser/**: 處理 Playwright 引擎初始化與 SPA 穩定性監控。
-- **src/utils/**: 包含 OTP 處理、性能守護 (Performance Guard) 與並發控制。
-
-### 2. 2GB RAM 效能優化 (Single-Page Policy)
-- **單頁策略**: 強制執行 Single-Page Policy，防止多標籤頁導致的 OOM 崩潰。
-- **資源阻擋**: 自動阻擋圖片、字體、Analytics 與追蹤器，將 CPU 資源留給 SPA 水合。
-- **CDP 持久連接**: 透過 Chrome DevTools Protocol 連接現有瀏覽器，維持 Session 穩定性。
-
-### 3. 嚴格錯誤回報與自我修復
-- **Stitch 404 自我修復**: 偵測到 `null/null/null` 或 Stitch 404 頁面時，自動觸發 `ensureLogin` 重新導向，修復損壞的會話。
-- **證據驅動**: 報錯時自動儲存 `.png` 截圖與 `.html` 原始碼至 `/home/ubuntu/.hermes/debug/`。
-- **性能守護 (3x Guard)**: E2E 任務若執行時間超過基準值的 3 倍，將立即終止並拋出 `STRICT FAIL`，防止系統卡死。
-
-### 4. 自動化登入與 MFA 處理
-- **多模式登入**: 支援「分步式」與「同屏式 (Email+Password)」登入頁面偵測。
-- **MailOTP 整合**: 自動透過 Gmail API 輪詢驗證碼，無需人工介入。
-
-## 安裝與設定
-
-1. **安裝依賴**:
-   ```bash
-   npm install
-   ```
-
-2. **環境變數**:
-   建立 `.env` 檔案並填入憑證：
-   ```text
-   DISNEY_EMAIL=your_email@gmail.com
-   DISNEY_PASSWORD=***
-   ```
-
-3. **啟動瀏覽器**:
-   確保 Chrome 以 CDP 模式在 9222 端口運行。
-
-## 測試
-
-測試套件已拆分為單元測試與端到端測試，以兼顧開發速度與運行穩定性。
-
-### 單元測試 (快速)
-涵蓋邏輯判定、狀態機與 Mock 驗證。已配置為 **Pre-commit Hook**。
-```bash
-npm run test:unit
+### 2. 環境變數配置
+在專案根目錄建立 `.env` 檔案，填入以下必要資訊：
+```env
+DISNEY_EMAIL=您的 MyDisney 帳號電子郵件
+DISNEY_PASSWORD=您的 MyDisney 帳號密碼
+# 選填：自動化 OTP (配合 MailOTP 功能)
+GMAIL_USER=您的 Gmail 帳號
+GMAIL_APP_PASSWORD=您的 Gmail 應用程式專用密碼
 ```
 
-### 端到端測試 (完整)
-真實模擬瀏覽器掃描 4 天的餐廳可用性，並驗證數據與性能指標。
+### 3. 安裝步驟
 ```bash
-npm run test:e2e
+npm install
+npx playwright install chromium
 ```
 
-## 檔案結構
-- `src/`: 原始碼目錄。
-- `tests/unit/`: 單元測試腳本。
-- `tests/e2e/`: 端到端測試腳本。
-- `tests/res/`: 測試資源與基準數據。
-- `.github/workflows/`: CI 設定檔。
-- `.husky/`: Git Hooks 設定。
+---
+
+## 🚀 工具列表 (Tools Reference)
+
+### 1. `get_my_plans`
+從預訂儀表板進入，自動辨識每日行程。
+*   **用途**: **核心入口工具**。系統會自動掃描預訂總覽頁面，辨識出第一個有效的預訂編號。
+*   **參數**: 無。
+*   **回傳範例**:
+    ```json
+    {
+      "reservation": { "reservationId": "44079507", "stateroom": "11879", "title": "5-Night Disney Adventure..." },
+      "plans": [ { "day": "Day 1", "date": "2026-04-23", "activities": [...] } ]
+    }
+    ```
+
+### 2. `get_all_activity_types`
+取得該預訂可加購的所有活動類別。
+*   **用途**: 獲取用於後續查詢的類別標籤 (Slug)。
+*   **參數**: 
+    *   `reservationId` (字串, 必填): 8位數字編號。
+*   **回傳**: 包含 `type` (中文/英文描述) 與 `slug` (系統代碼，如 `DINE`, `SPA`) 的陣列。
+
+### 3. `get_activity_list`
+獲取特定類別在指定日期的所有可選項目清單。
+*   **參數**: 
+    *   `reservationId` (必填)
+    *   `slug` (必填): 活動類別代碼。
+    *   `date` (必填): 格式為 `YYYY-MM-DD`。
+*   **回傳**: 該類別下所有項目的名稱、預估價格、地點以及內部的 `productId`。
+
+### 4. `get_activity_details`
+針對特定項目進行深度掃描，確認精確的可預訂時段。
+*   **參數**: 
+    *   `reservationId`, `slug`, `date`, `activityName` (皆為必填)。
+*   **回傳**: 
+    *   `status`: "Available", "No Slots", 或 "Sold Out"。
+    *   `times`: 目前可選的時間點（如 `["6:00 PM", "8:15 PM"]`）。
+
+### 5. `ensure_login`
+驗證登入狀態並導出 Session 數據。
+*   **用途**: 供其他自動化工具（如獨立的爬蟲腳本）直接復用登入狀態。
+*   **回傳**: 包含 `cookies` 與 `webStorage` 的完整 JSON。
+
+---
+
+## 🔄 推薦自動化工作流 (Workflow)
+
+為確保代理人運作流暢，建議遵循以下路徑：
+
+1.  **第一步：辨識身分**
+    呼叫 `get_my_plans` (不帶 ID)。
+    -> 從回傳的 `reservation.reservationId` 取得身分，並從 `plans` 確認目前空檔。
+
+2.  **第二步：尋找目標**
+    呼叫 `get_all_activity_types` 獲取想查看的類別 (如 `SPA`)。
+    -> 呼叫 `get_activity_list` 找出該類別在特定日期的所有活動名稱。
+
+3.  **第三步：精確監控**
+    針對心儀活動呼叫 `get_activity_details` 獲取時段。
+
+---
+
+## ⚠️ 代理人操作規範
+
+*   **錯誤處理**: 系統實施 **Fail Fast** 策略。任何觸發 404 (Page Not Found) 或登入失敗的情況，均會回傳以 `STRICT FAIL` 開頭的錯誤，請代理人優先分析錯誤訊息中的 `Evidence` (截圖路徑)。
+*   **效能限制**: 系統內建併發鎖，同時間僅允許一個瀏覽器實體運行。請勿平行發送多個查詢。

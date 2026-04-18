@@ -1,0 +1,17 @@
+[
+  {
+    "type": "Onboard Fun",
+    "slug": "ONBOARDFUN",
+    "status": "Available"
+  },
+  {
+    "type": "Dining",
+    "slug": "DINE",
+    "status": "Available"
+  },
+  {
+    "type": "Spa & Fitness",
+    "slug": "SPAANDFITNESS",
+    "status": "Available"
+  }
+]

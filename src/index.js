@@ -5,33 +5,78 @@ const { CallToolRequestSchema, ListToolsRequestSchema } = require("@modelcontext
 
 // Import modules
 const { withLock } = require('./utils/concurrency');
-const { getActivityDetails } = require('./automation/activities');
+const { getActivityDetails, getAllActivityTypes, getMyPlans, getActivityList } = require('./automation/activities');
 
 // Export for tests if needed
-const { checkPageStatus, ensureLogin } = require('./automation/session');
+const { checkPageStatus, ensureLogin, verifySession } = require('./automation/session');
 const { navigateUrl } = require('./automation/navigation');
 const { waitForAngular } = require('./browser/stability');
 
 const server = new Server(
-  { name: "disney-cruise-automation", version: "1.7.0" },
+  { name: "disney-cruise-automation", version: "1.8.0" },
   { capabilities: { tools: {} } }
 );
 
 server.setRequestHandler(ListToolsRequestSchema, async () => ({
-  tools: [{ 
-    name: "get_activity_details", 
-    description: "Fetch activity availability and times.", 
-    inputSchema: { 
-      type: "object", 
-      properties: { 
-        reservationId: { type: "string" }, 
-        slug: { type: "string" }, 
-        date: { type: "string" }, 
-        activityName: { type: "string" } 
-      }, 
-      required: ["reservationId", "slug", "date", "activityName"] 
-    } 
-  }]
+  tools: [
+    { 
+      name: "get_activity_details", 
+      description: "Fetch activity availability and times.", 
+      inputSchema: { 
+        type: "object", 
+        properties: { 
+          reservationId: { type: "string" }, 
+          slug: { type: "string" }, 
+          date: { type: "string" }, 
+          activityName: { type: "string" } 
+        }, 
+        required: ["reservationId", "slug", "date", "activityName"] 
+      } 
+    },
+    { 
+      name: "get_all_activity_types", 
+      description: "Navigate to My Plans and get all available activity categories/slugs.", 
+      inputSchema: { 
+        type: "object", 
+        properties: { 
+          reservationId: { type: "string" } 
+        }, 
+        required: ["reservationId"] 
+      } 
+    },
+    { 
+      name: "get_my_plans", 
+      description: "Auto-detect the first available reservation from the dashboard and fetch its daily itinerary and planned activities. Returns metadata (reservationId, stateroom) plus plans.", 
+      inputSchema: { 
+        type: "object", 
+        properties: {}
+      } 
+    },
+    { 
+      name: "get_activity_list", 
+      description: "Fetch the list of activities available for a specific category and date.", 
+      inputSchema: { 
+        type: "object", 
+        properties: { 
+          reservationId: { type: "string" },
+          slug: { type: "string" },
+          date: { type: "string" }
+        }, 
+        required: ["reservationId", "slug", "date"] 
+      } 
+    },
+    { 
+      name: "ensure_login", 
+      description: "Verify login session and return cookies for external use.", 
+      inputSchema: { 
+        type: "object", 
+        properties: { 
+          reservationId: { type: "string" }
+        }, 
+        required: ["reservationId"] 
+      } 
+    }
+  ]
 }));
 
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
@@ -40,6 +85,22 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     try {
       if (name === "get_activity_details") {
         const result = await getActivityDetails(args.reservationId, args.slug, args.date, args.activityName);
+        return { content: [{ type: "text", text: JSON.stringify(result) }] };
+      }
+      if (name === "get_all_activity_types") {
+        const result = await getAllActivityTypes(args.reservationId);
+        return { content: [{ type: "text", text: JSON.stringify(result) }] };
+      }
+      if (name === "get_my_plans") {
+        const result = await getMyPlans();
+        return { content: [{ type: "text", text: JSON.stringify(result) }] };
+      }
+      if (name === "get_activity_list") {
+        const result = await getActivityList(args.reservationId, args.slug, args.date);
+        return { content: [{ type: "text", text: JSON.stringify(result) }] };
+      }
+      if (name === "ensure_login") {
+        const result = await verifySession(args.reservationId);
         return { content: [{ type: "text", text: JSON.stringify(result) }] };
       }
       throw new Error("Tool not found");
@@ -52,10 +113,15 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 module.exports = { 
   checkPageStatus, 
   ensureLogin, 
+  verifySession,
   navigateUrl, 
   getActivityDetails,
+  getAllActivityTypes,
+  getMyPlans,
+  getActivityList,
   waitForAngular 
 };
+
 
 (async () => {
   if (require.main === module) {

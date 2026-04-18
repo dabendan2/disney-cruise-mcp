@@ -3,6 +3,8 @@ const { MailOTP } = require('../utils/otp');
 const { URLS, SELECTORS, ERROR_INDICATORS, AUTH_MARKERS } = require('../constants');
 const fs = require('fs');
 
+const { getPage } = require('../browser/engine');
+
 const otpService = new MailOTP();
 
 async function checkPageStatus(page, reservationId) {
@@ -20,11 +22,11 @@ async function checkPageStatus(page, reservationId) {
     logTime(`[CHECK] URL: ${url}`);
 
     if (ERROR_INDICATORS.some(text => content.includes(text)) || title === "404" || url.includes("null/null/null")) {
-        return "STITCH_ERROR";
+        return "PAGE_NOT_FOUND_ERROR";
     }
 
     const isLoggedIn = AUTH_MARKERS.some(marker => content.includes(marker));
-    const isReservationUrl = url.includes(URLS.RESERVATION_BASE) && /\/\d{8}\//.test(url);
+    const isReservationUrl = url.includes(URLS.RESERVATION_BASE) && (/\/\d{8}\//.test(url) || url.includes('/my-reservations'));
     if (isLoggedIn || isReservationUrl) {
         return "LOGGED_IN";
     }
@@ -64,15 +66,60 @@ async function checkPageStatus(page, reservationId) {
     return "UNKNOWN";
 }
 
+/**
+ * Capture full session state (Cookies + Storage)
+ * Uses CDP for cookies as standard Playwright cookies() often fails on existing browser connections
+ */
+async function getStorageState(page) {
+    // Extract cookies via CDP Session for higher reliability on CDP connections
+    let cookies = [];
+    try {
+        const client = await page.context().newCDPSession(page);
+        const { cookies: cdpCookies } = await client.send('Network.getAllCookies');
+        // Sanitize cookies for Playwright compatibility (especially partitionKey)
+        cookies = cdpCookies.map(c => {
+            const sanitized = { ...c };
+            if (sanitized.partitionKey && typeof sanitized.partitionKey === 'object') {
+                // Playwright expects partitionKey to be a string or omitted
+                delete sanitized.partitionKey;
+            }
+            return sanitized;
+        });
+        await client.detach();
+    } catch (e) {
+        logTime(`[WARN] CDP cookie extraction failed: ${e.message}. Falling back to standard.`);
+        cookies = await page.context().cookies();
+    }
+    
+    // Playwright standard storageState for origins
+    const storage = await page.context().storageState();
+    
+    // Captured multiple essential origins for DCL/Disney
+    const origins = await page.evaluate(() => {
+        const results = [];
+        const baseStorage = {
+            localStorage: { ...localStorage },
+            sessionStorage: { ...sessionStorage }
+        };
+        results.push({ origin: window.location.origin, ...baseStorage });
+        return results;
+    });
+    
+    return { ...storage, cookies, webStorage: origins };
+}
+
 async function ensureLogin(page, reservationId) {
     let status = await checkPageStatus(page, reservationId);
-    if (status === "LOGGED_IN") return "SUCCESS";
+    if (status === "LOGGED_IN") {
+        const state = await getStorageState(page);
+        return { status: "SUCCESS", state };
+    }
 
     const frameElement = page.locator(SELECTORS.ONEID_IFRAME);
     const frame = page.frameLocator(SELECTORS.ONEID_IFRAME);
 
-    if (status === "STITCH_ERROR" || (status !== "OTP_SCREEN" && status !== "LOGIN_SCREEN" && status !== "LOGIN_SCREEN_BOTH")) {
-        logTime("Redirecting to login (due to Stitch error or session loss)...");
+    if (status === "PAGE_NOT_FOUND_ERROR" || (status !== "OTP_SCREEN" && status !== "LOGIN_SCREEN" && status !== "LOGIN_SCREEN_BOTH")) {
+        logTime("Redirecting to login (due to Page Not Found error or session loss)...");
         await page.goto(URLS.LOGIN, { waitUntil: 'domcontentloaded', timeout: 60000 });
         await frameElement.waitFor({ state: 'visible', timeout: 35000 }).catch(async () => {
             const path = await saveDebug(page, "login_iframe_timeout");
@@ -140,10 +187,23 @@ async function ensureLogin(page, reservationId) {
 
     await new Promise(r => setTimeout(r, 5000));
     const finalStatus = await checkPageStatus(page, reservationId);
-    if (finalStatus === "LOGGED_IN") return "SUCCESS";
+    if (finalStatus === "LOGGED_IN") {
+        const state = await getStorageState(page);
+        return { status: "SUCCESS", state };
+    }
     
     const path = await saveDebug(page, "login_final_fail");
     throw new Error(`STRICT FAIL: Login final check failed. Status: ${finalStatus}, Evidence: ${path}`);
 }
 
-module.exports = { checkPageStatus, ensureLogin };
+async function verifySession(reservationId) {
+    const { browser, page } = await getPage();
+    try {
+        const result = await ensureLogin(page, reservationId);
+        return result;
+    } finally {
+        if (browser) await browser.close().catch(() => {});
+    }
+}
+
+module.exports = { checkPageStatus, ensureLogin, verifySession };

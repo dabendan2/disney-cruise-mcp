@@ -27,7 +27,9 @@ async function checkPageStatus(page, reservationId) {
 
     const isLoggedIn = AUTH_MARKERS.some(marker => content.includes(marker));
     const isReservationUrl = url.includes(URLS.RESERVATION_BASE) && (/\/\d{8}\//.test(url) || url.includes('/my-reservations'));
-    if (isLoggedIn || isReservationUrl) {
+    const isLoginUrl = url.includes("/login");
+
+    if ((isLoggedIn || isReservationUrl) && !isLoginUrl) {
         return "LOGGED_IN";
     }
 

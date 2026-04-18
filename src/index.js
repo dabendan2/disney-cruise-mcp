@@ -5,7 +5,7 @@ const { CallToolRequestSchema, ListToolsRequestSchema } = require("@modelcontext
 
 // Import modules
 const { withLock } = require('./utils/concurrency');
-const { getActivityDetails, getAllActivityTypes, getMyPlans, getActivityList } = require('./automation/activities');
+const { getActivityDetails, getAllActivityTypes, getMyPlans, getActivityList, addActivity } = require('./automation/activities');
 
 // Export for tests if needed
 const { checkPageStatus, ensureLogin, verifySession } = require('./automation/session');
@@ -66,6 +66,21 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       } 
     },
     { 
+      name: "add_activity", 
+      description: "Add an activity to the cruise itinerary by selecting guests and a specific time slot.", 
+      inputSchema: { 
+        type: "object", 
+        properties: { 
+          reservationId: { type: "string" },
+          slug: { type: "string" },
+          date: { type: "string" },
+          activityName: { type: "string" },
+          timeSlot: { type: "string" }
+        }, 
+        required: ["reservationId", "slug", "date", "activityName", "timeSlot"] 
+      } 
+    },
+    { 
       name: "ensure_login", 
       description: "Verify login session and return cookies for external use.", 
       inputSchema: { 
@@ -99,6 +114,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const result = await getActivityList(args.reservationId, args.slug, args.date);
         return { content: [{ type: "text", text: JSON.stringify(result) }] };
       }
+      if (name === "add_activity") {
+        const result = await addActivity(args.reservationId, args.slug, args.date, args.activityName, args.timeSlot);
+        return { content: [{ type: "text", text: JSON.stringify(result) }] };
+      }
       if (name === "ensure_login") {
         const result = await verifySession(args.reservationId);
         return { content: [{ type: "text", text: JSON.stringify(result) }] };
@@ -119,6 +138,7 @@ module.exports = {
   getAllActivityTypes,
   getMyPlans,
   getActivityList,
+  addActivity,
   waitForAngular 
 };
 

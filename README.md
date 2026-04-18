@@ -63,7 +63,24 @@ npx playwright install chromium
     *   `status`: "Available", "No Slots", 或 "Sold Out"。
     *   `times`: 目前可選的時間點（如 `["6:00 PM", "8:15 PM"]`）。
 
-### 5. `ensure_login`
+### 5. `add_activity`
+新增活動至預訂行程。
+*   **參數**: 
+    *   `reservationId`, `slug`, `date`, `activityName`, `timeSlot` (皆為必填)。
+*   **功能特點**: 
+    *   **完整錯誤捕獲**: 自動識別並回報官網原始錯誤文字（例如："We are currently unable to complete your request..."），不進行任何截斷或模糊轉譯。
+    *   **狀態監控**: 自動追蹤預訂後的跳轉與 Success 標籤。
+    *   **證據留存**: 無論預訂成功或失敗，均會自動生成當下畫面的截圖與 HTML 存檔供後續核對。
+*   **回傳範例**:
+    ```json
+    {
+      "status": "FAILED",
+      "message": "We are currently unable to complete your request. Please check availability once on board or try again later.",
+      "evidence": "/path/to/debug/booking_FAILURE.png"
+    }
+    ```
+
+### 6. `ensure_login`
 驗證登入狀態並導出 Session 數據。
 *   **用途**: 供其他自動化工具（如獨立的爬蟲腳本）直接復用登入狀態。
 *   **回傳**: 包含 `cookies` 與 `webStorage` 的完整 JSON。

@@ -358,4 +358,98 @@ async function getActivityList(reservationId, slug, date) {
     }
 }
 
-module.exports = { getActivityDetails, getAllActivityTypes, getMyPlans, getActivityList };
+async function addActivity(reservationId, slug, date, activityName, timeSlot) {
+    const start = Date.now();
+    const targetUrl = `https://disneycruise.disney.go.com/my-disney-cruise/${reservationId}/${slug}/${date}/?ship=DA&port=SIN`;
+    
+    const { browser, page } = await navigateUrl(targetUrl, reservationId, 'wdpr-activity-card', 45000);
+    
+    try {
+        logTime(`[ADD_ACTIVITY] Starting for: ${activityName} at ${timeSlot}`);
+
+        const card = page.locator('wdpr-activity-card').filter({ hasText: new RegExp(activityName, "i") }).first();
+        await card.waitFor({ state: 'visible', timeout: 15000 });
+        
+        // 1. Initial Click
+        const selectBtn = card.locator('button, a.btn').filter({ hasText: /Select|Add/i }).first();
+        await selectBtn.click();
+        
+        // 2. Select Guests
+        await page.waitForSelector('label.btn-checkbox-label', { timeout: 10000 });
+        const guests = page.locator('label.btn-checkbox-label');
+        for (let i = 0; i < await guests.count(); i++) {
+            await guests.nth(i).click();
+        }
+        await page.locator('button').filter({ hasText: /Check Availability/i }).first().click();
+        
+        // 3. Handle Time Dropdown
+        const dropdown = page.locator('button, [role="button"], .dropdown-toggle').filter({ hasText: /Select Time/i }).first();
+        if (await dropdown.isVisible({ timeout: 5000 }).catch(() => false)) {
+            logTime("Clicking Select Time dropdown (JS forced)...");
+            await dropdown.evaluate(el => el.click());
+            await page.waitForTimeout(3000); 
+        }
+        
+        // 4. Select Slot
+        const slot = page.locator('li[role="option"], .option-link, button, .time-slot').filter({ hasText: new RegExp("^" + timeSlot + "$", "i") }).first();
+        try {
+            await slot.waitFor({ state: 'visible', timeout: 5000 });
+        } catch (e) {
+            logTime("Slot not visible, attempting JS click on hidden element...");
+        }
+        await slot.evaluate(el => el.click());
+        await page.waitForTimeout(2000);
+        
+        // 5. Final Commit
+        logTime("Attempting to click SAVE...");
+        const saveBtn = page.locator('button, .cta-button').filter({ hasText: /^Save$/i }).first();
+        try {
+            await saveBtn.waitFor({ state: 'visible', timeout: 5000 });
+            await saveBtn.click();
+        } catch (e) {
+            logTime("Save button visibility check failed, attempting JS click anyway...");
+            await page.evaluate(() => {
+                const btns = Array.from(document.querySelectorAll('button, .cta-button, a'));
+                const save = btns.find(b => b.innerText.trim() === 'Save');
+                if (save) save.click();
+                else throw new Error("Save button not found in DOM");
+            });
+        }
+        
+        // 6. Monitor Result (Wait for redirect or error message)
+        logTime("Waiting for booking result...");
+        const result = await Promise.race([
+            page.waitForURL(/my-plans/, { timeout: 25000 }).then(() => ({ success: true, msg: "Redirected to My Plans" })),
+            page.waitForSelector('text=Success', { timeout: 25000 }).then(() => ({ success: true, msg: "Success text detected" })),
+            // Verbatim Error Capturing
+            page.waitForSelector('#warning-messaging-title, .error-message, [role="alert"], .warning-messaging-title', { timeout: 25000 }).then(async (el) => {
+                const fullText = await el.innerText();
+                return { success: false, msg: fullText.trim() };
+            })
+        ]).catch(() => ({ success: false, msg: "Timeout waiting for confirmation result" }));
+
+        const finalPath = await saveDebug(page, result.success ? "booking_SUCCESS" : "booking_FAILURE");
+        
+        return {
+            activityName,
+            timeSlot,
+            status: result.success ? "SUCCESS" : "FAILED",
+            message: result.msg, // This will now contain the full verbatim error text
+            evidence: finalPath,
+            timing: { total_sec: (Date.now() - start)/1000 }
+        };
+
+    } catch (e) {
+        const errPath = await saveDebug(page, "booking_CRASH");
+        return {
+            status: "ERROR",
+            message: e.message,
+            evidence: errPath,
+            timing: { total_sec: (Date.now() - start)/1000 }
+        };
+    } finally {
+        if (browser) await browser.close();
+    }
+}
+
+module.exports = { getActivityDetails, getAllActivityTypes, getMyPlans, getActivityList, addActivity };

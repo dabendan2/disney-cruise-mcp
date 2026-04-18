@@ -514,20 +514,27 @@ async function addActivity(reservationId, slug, date, activityName, timeSlot) {
         if (result.success) {
             logTime("Booking success detected. Waiting for itinerary to render...");
             try {
-                // Wait for the itinerary container to appear
-                await page.waitForSelector('day-view, activity-card', { timeout: 20000 });
-                // Give it a bit more time for names and details to populate
-                await page.waitForTimeout(10000);
+                // 1. Wait for the container to appear
+                await page.waitForSelector('day-view', { timeout: 20000 }).catch(() => {});
                 
-                // Try to find and scroll to the booked activity for the screenshot
+                // 2. Dynamic wait for the specific activity card (much faster than fixed timeout)
                 const activityLocator = page.locator('activity-card').filter({ hasText: new RegExp(activityName, "i") }).first();
+                
+                logTime(`Waiting for activity card: ${activityName}...`);
+                await activityLocator.waitFor({ state: 'visible', timeout: 15000 }).catch(() => {
+                    logTime("Activity card not immediately visible, might be further down.");
+                });
+                
+                // 3. Scroll to the activity for a clear screenshot
                 if (await activityLocator.isVisible()) {
                     logTime(`Scrolling to activity: ${activityName}`);
                     await activityLocator.scrollIntoViewIfNeeded();
-                    await page.waitForTimeout(2000); // Wait for scroll animation
+                    await page.waitForTimeout(1000); // Short buffer for scroll animation
+                } else {
+                    logTime("Activity not found in current view, taking full page screenshot.");
                 }
             } catch (renderErr) {
-                logTime(`Warning: Failed to scroll to activity in itinerary: ${renderErr.message}`);
+                logTime(`Warning: Itinerary rendering check skipped: ${renderErr.message}`);
             }
         }
 

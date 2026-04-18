@@ -1,10 +1,11 @@
+const os = require('os');
 const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
 const { MailOTP } = require('../../src/utils/otp');
 
 // Mock setup
-const tokenPath = path.join(__dirname, '../res', 'mock_google_token.json');
+const tokenPath = path.join(os.tmpdir(), 'mock_google_token.json');
 
 function setupMockToken(content) {
     if (!fs.existsSync(path.dirname(tokenPath))) fs.mkdirSync(path.dirname(tokenPath), { recursive: true });

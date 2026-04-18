@@ -1,3 +1,4 @@
+require('dotenv').config();
 const { navigateUrl } = require('./navigation');
 const { logTime, saveDebug } = require('../utils/debug');
 const { SELECTORS } = require('../constants');

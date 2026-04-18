@@ -2,53 +2,38 @@ const assert = require('assert');
 const { waitForAngular } = require('../../src/index.js');
 
 /**
- * Mock Page for Stability Tests
+ * Unit Test: service_stability
+ * Validates waitForAngular behavior.
  */
-function createMockStabilityPage({ angularReady, requestsCount, timeoutTrigger }) {
-    return {
-        waitForFunction: async (fn, { timeout }) => {
-            if (timeoutTrigger) throw new Error("Timeout");
-            // Simulate the internal function evaluation
-            const result = await fn();
-            if (!result) throw new Error("Stability check failed in mock");
-            return true;
-        },
-        screenshot: async () => Buffer.from(""),
-        content: async () => "<html></html>",
-        // Global variables inside page context
-        evaluate: async (fn) => {
-            global.window = { angular: { element: () => ({ injector: () => ({ get: () => ({ outstandingRequestsCount: requestsCount }) }) }) } };
-            return fn();
-        }
-    };
-}
-
 async function runStabilityTests() {
     console.log("🚀 Starting Stability & Hydration Tests...");
 
     // Test: Angular Success
     try {
-        // Since waitForAngular uses a complex browser-side function, 
-        // we test the wrapper's error handling.
         const page = {
             waitForFunction: async () => true, // Success
         };
         await waitForAngular(page);
         console.log("✅ Test: waitForAngular Success Case");
-    } catch (e) { console.error("❌ Test failed:", e.message); }
+    } catch (e) { 
+        console.error("❌ Test failed:", e.message); 
+        process.exit(1);
+    }
 
-    // Test: Angular Timeout (Strict Fail)
+    // Test: Angular Timeout (Non-fatal)
+    // As per V2 strategy, Angular timeouts are warnings, not fatal errors.
     try {
         const page = {
             waitForFunction: async () => { throw new Error("timeout"); },
+            evaluate: async () => ({ outstandingCount: 1, pendingUrls: [] }),
             screenshot: async () => Buffer.from(""),
             content: async () => "<html></html>",
         };
-        await waitForAngular(page);
-        console.error("❌ Test failed: Should have thrown STRICT FAIL on timeout");
+        await waitForAngular(page, 100); // Short timeout for test
+        console.log("✅ Test: waitForAngular Timeout (Verified Non-fatal)");
     } catch (e) {
-        assert.ok(e.message.includes("STRICT FAIL"), "Should map timeout to STRICT FAIL");
-        console.log("✅ Test: waitForAngular Timeout Mapping");
+        console.error("❌ Test failed: waitForAngular should be non-fatal on timeout. Error:", e.message);
+        process.exit(1);
     }
 
     console.log("\n🏁 Stability Tests Completed.");

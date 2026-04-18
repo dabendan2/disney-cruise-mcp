@@ -1,88 +1,30 @@
 const { logTime, saveDebug } = require('../utils/debug');
 const { MailOTP } = require('../utils/otp');
-const { URLS, SELECTORS, ERROR_INDICATORS, AUTH_MARKERS } = require('../constants');
-const fs = require('fs');
-
+const { SELECTORS } = require('../constants');
+const { checkLoginStatus } = require('../utils/ui_logic');
 const { ensureCdpPage } = require('../browser/engine');
+const os = require('os');
 
 const otpService = new MailOTP();
 
-async function checkPageStatus(page, reservationId) {
-    const url = page.url();
-    let content = "";
-    let title = "";
-    try {
-        content = await page.content();
-        title = await page.title();
-    } catch (e) {
-        const path = await saveDebug(page, "page_access_error");
-        throw new Error(`STRICT FAIL: Page inaccessible: ${e.message}. Evidence: ${path}`);
-    }
-
-    logTime(`[CHECK] URL: ${url}`);
-
-    if (ERROR_INDICATORS.some(text => content.includes(text)) || title === "404" || url.includes("null/null/null")) {
-        return "PAGE_NOT_FOUND_ERROR";
-    }
-
-    const isLoggedIn = AUTH_MARKERS.some(marker => content.includes(marker));
-    const isReservationUrl = url.includes(URLS.RESERVATION_BASE) && (/\/\d{8}\//.test(url) || url.includes('/my-reservations'));
-    const isLoginUrl = url.includes("/login");
-
-    if ((isLoggedIn || isReservationUrl) && !isLoginUrl) {
-        return "LOGGED_IN";
-    }
-
-    const frameElement = page.locator(SELECTORS.ONEID_IFRAME);
-    if (await frameElement.isVisible({ timeout: 2000 }).catch(() => false)) {
-        const frame = page.frameLocator(SELECTORS.ONEID_IFRAME);
-        
-        const otpInput = frame.locator(SELECTORS.OTP_INPUTS.join(', ')).first();
-        if (await otpInput.isVisible({ timeout: 1500 }).catch(() => false)) {
-            return "OTP_SCREEN";
-        }
-
-        const errorText = await frame.locator(SELECTORS.ERROR_MESSAGES.join(', ')).innerText().catch(() => "");
-        if (errorText.length > 5) {
-            const path = await saveDebug(page, "login_error_detected");
-            throw new Error(`STRICT FAIL: Login Error Detected: "${errorText}". Evidence: ${path}`);
-        }
-
-        const emailInput = frame.locator(SELECTORS.LOGIN_INPUTS.join(', ')).first();
-        const passwordInput = frame.locator(SELECTORS.PASSWORD_INPUTS.join(', ')).first();
-        
-        const emailVisible = await emailInput.isVisible({ timeout: 1000 }).catch(() => false);
-        const passwordVisible = await passwordInput.isVisible({ timeout: 1000 }).catch(() => false);
-
-        if (emailVisible && passwordVisible) {
-            return "LOGIN_SCREEN_BOTH";
-        }
-        if (emailVisible) {
-            return "LOGIN_SCREEN";
-        }
-    }
-
-    if (url.includes("/login")) return "LOGIN_SCREEN";
-    if (url === "about:blank" || url.includes("chrome://")) return "NEED_LOGIN";
-
-    return "UNKNOWN";
+/**
+ * Returns the current CPU load average (1 minute)
+ */
+function getCpuLoad() {
+    return os.loadavg()[0];
 }
 
 /**
  * Capture full session state (Cookies + Storage)
- * Uses CDP for cookies as standard Playwright cookies() often fails on existing browser connections
  */
 async function getStorageState(page) {
-    // Extract cookies via CDP Session for higher reliability on CDP connections
     let cookies = [];
     try {
         const client = await page.context().newCDPSession(page);
         const { cookies: cdpCookies } = await client.send('Network.getAllCookies');
-        // Sanitize cookies for Playwright compatibility (especially partitionKey)
         cookies = cdpCookies.map(c => {
             const sanitized = { ...c };
             if (sanitized.partitionKey && typeof sanitized.partitionKey === 'object') {
-                // Playwright expects partitionKey to be a string or omitted
                 delete sanitized.partitionKey;
             }
             return sanitized;
@@ -93,119 +35,201 @@ async function getStorageState(page) {
         cookies = await page.context().cookies();
     }
     
-    // Playwright standard storageState for origins
     const storage = await page.context().storageState();
     
-    // Captured multiple essential origins for DCL/Disney
     const origins = await page.evaluate(() => {
         const results = [];
-        const baseStorage = {
-            localStorage: { ...localStorage },
-            sessionStorage: { ...sessionStorage }
-        };
-        results.push({ origin: window.location.origin, ...baseStorage });
+        try {
+            const baseStorage = {
+                localStorage: { ...localStorage },
+                sessionStorage: { ...sessionStorage }
+            };
+            results.push({ origin: window.location.origin, ...baseStorage });
+        } catch (e) {}
         return results;
     });
     
     return { ...storage, cookies, webStorage: origins };
 }
 
-async function ensureLogin(page, reservationId) {
-    let status = await checkPageStatus(page, reservationId);
-    if (status === "LOGGED_IN") {
-        const state = await getStorageState(page);
-        return { status: "SUCCESS", state };
+/**
+ * Universal State Machine based login process.
+ * Removes obstacles until "login_not_needed" is confirmed after hydration.
+ */
+async function ensureLogin(page) {
+    const startTime = Date.now();
+    const totalTimeout = 120000; // 2 minutes total
+    const actionTimeout = 30000; // 30 seconds per action
+    let unknownCount = 0;
+
+    logTime("🚀 Starting ensureLogin state machine...");
+
+    // PRE-CHECK: Wait for page to have some content (avoid blank shell issues)
+    try {
+        await page.waitForSelector('main, header, footer, #oneid-wrapper, input', { state: 'attached', timeout: 15000 });
+    } catch (e) {
+        logTime("[WARN] Initial content check timed out. Proceeding anyway...");
     }
 
-    const frameElement = page.locator(SELECTORS.ONEID_IFRAME);
-    const frame = page.frameLocator(SELECTORS.ONEID_IFRAME);
+    while (Date.now() - startTime < totalTimeout) {
+        let mainHtml = "";
+        let iframeHtml = "";
 
-    if (status === "PAGE_NOT_FOUND_ERROR" || (status !== "OTP_SCREEN" && status !== "LOGIN_SCREEN" && status !== "LOGIN_SCREEN_BOTH")) {
-        logTime("Redirecting to login (due to Page Not Found error or session loss)...");
-        await page.goto(URLS.LOGIN, { waitUntil: 'domcontentloaded', timeout: 60000 });
-        await frameElement.waitFor({ state: 'visible', timeout: 35000 }).catch(async () => {
-            const path = await saveDebug(page, "login_iframe_timeout");
-            throw new Error(`STRICT FAIL: Login Iframe timeout (35s). Evidence: ${path}`);
-        });
-        status = await checkPageStatus(page, reservationId);
-    }
-
-    if (status === "LOGIN_SCREEN_BOTH") {
-        logTime("Submitting credentials (Combined Screen)...");
-        const emailInput = frame.locator(SELECTORS.LOGIN_INPUTS.join(', ')).first();
-        const passwordInput = frame.locator(SELECTORS.PASSWORD_INPUTS.join(', ')).first();
-        const submitBtn = frame.locator(SELECTORS.SUBMIT_BUTTON).first();
-
-        await emailInput.fill(process.env.DISNEY_EMAIL);
-        await passwordInput.fill(process.env.DISNEY_PASSWORD);
-        await submitBtn.click();
-        
-        await new Promise(r => setTimeout(r, 6000));
-        status = await checkPageStatus(page, reservationId);
-    } else if (status === "LOGIN_SCREEN") {
-        logTime("Submitting credentials (Step-by-Step)...");
-        const emailInput = frame.locator(SELECTORS.LOGIN_INPUTS.join(', ')).first();
-        const passwordInput = frame.locator(SELECTORS.PASSWORD_INPUTS.join(', ')).first();
-        const submitBtn = frame.locator(SELECTORS.SUBMIT_BUTTON).first();
-
-        await emailInput.waitFor({ state: 'visible', timeout: 15000 }).catch(async () => {
-            const path = await saveDebug(page, "email_input_timeout");
-            throw new Error(`STRICT FAIL: Email input not found. Evidence: ${path}`);
-        });
-        await emailInput.fill(process.env.DISNEY_EMAIL);
-        await submitBtn.click();
-        
-        await passwordInput.waitFor({ state: 'visible', timeout: 25000 }).catch(async () => {
-            const path = await saveDebug(page, "password_input_timeout");
-            throw new Error(`STRICT FAIL: Password input timeout. Evidence: ${path}`);
-        });
-        
-        await passwordInput.fill(process.env.DISNEY_PASSWORD);
-        await submitBtn.click();
-        
-        await new Promise(r => setTimeout(r, 6000));
-        status = await checkPageStatus(page, reservationId);
-    }
-
-    if (status === "OTP_SCREEN") {
-        logTime("[OTP] MFA Screen detected. Polling via MailOTP...");
-        const otpInput = frame.locator(SELECTORS.OTP_INPUTS.join(', ')).first();
-        const submitBtn = frame.locator(SELECTORS.SUBMIT_BUTTON).first();
-        
         try {
-            const code = await otpService.poll(300000); // 5 min poll
-            logTime(`[OTP] Applying code: ${code}`);
-            await otpInput.fill(code);
-            await submitBtn.click();
-            await frameElement.waitFor({ state: 'hidden', timeout: 40000 }).catch(async () => {
-                const path = await saveDebug(page, "otp_submit_hang");
-                throw new Error(`STRICT FAIL: Page hung after OTP submission. Evidence: ${path}`);
-            });
+            mainHtml = await page.content();
+            const frameHandle = await page.$(SELECTORS.ONEID_IFRAME);
+            if (frameHandle) {
+                const frame = await frameHandle.contentFrame();
+                if (frame) iframeHtml = await frame.content().catch(() => "");
+            }
         } catch (e) {
-            const path = await saveDebug(page, "otp_failure");
-            throw new Error(`STRICT FAIL: OTP process failed: ${e.message}. Evidence: ${path}`);
+            logTime(`[WARN] Content fetch failed (likely navigating): ${e.message}`);
+            await new Promise(r => setTimeout(r, 2000));
+            continue;
         }
-    }
 
-    await new Promise(r => setTimeout(r, 5000));
-    const finalStatus = await checkPageStatus(page, reservationId);
-    if (finalStatus === "LOGGED_IN") {
-        const state = await getStorageState(page);
-        return { status: "SUCCESS", state };
+        // Determine status: Iframe takes priority if it contains login forms
+        let status = checkLoginStatus(mainHtml);
+        if (iframeHtml) {
+            const iframeStatus = checkLoginStatus(iframeHtml);
+            // If the iframe has a specific state, it ALWAYS overrides the generic main page state.
+            if (iframeStatus !== "UNKNOWN") {
+                status = iframeStatus;
+            }
+        }
+
+        logTime(`[STATE] Current status: ${status}`);
+
+        if (status === "PAGE_ERROR") {
+            const path = await saveDebug(page, "system_page_error");
+            throw new Error(`STRICT FAIL: Disney system error detected (PAGE_ERROR). Evidence: ${path}`);
+        }
+
+        // Handle "No Login Required" (UNKNOWN) with Settle Sequence
+        if (status === "UNKNOWN") {
+            if (unknownCount === 0) {
+                logTime("[STATE] UNKNOWN (Initial Detect). Starting hydration settle sequence...");
+                unknownCount = 1;
+
+                // 1. Wait for document load
+                await page.waitForLoadState('load', { timeout: 30000 }).catch(() => {});
+
+                // 2. Unconditional 2s wait
+                await new Promise(r => setTimeout(r, 2000));
+
+                // 3. Wait for CPU < 2.5 (Max 30s)
+                const cpuStart = Date.now();
+                while (Date.now() - cpuStart < 30000) {
+                    const load = getCpuLoad();
+                    if (load < 2.5) {
+                        logTime(`[SETTLE] CPU Load stabilized: ${load.toFixed(2)}`);
+                        break;
+                    }
+                    await new Promise(r => setTimeout(r, 1000));
+                }
+
+                // 4. Wait for DOM Silence (Hydration Events)
+                logTime("[SETTLE] Waiting for DOM silence (2s window)...");
+                await page.evaluate(() => {
+                    window.__hermes_dom_ts = Date.now();
+                    const obs = new MutationObserver(() => { window.__hermes_dom_ts = Date.now(); });
+                    obs.observe(document, { attributes: true, childList: true, subtree: true });
+                }).catch(() => {});
+
+                const domStart = Date.now();
+                while (Date.now() - domStart < 30000) {
+                    const idleTime = await page.evaluate(() => Date.now() - window.__hermes_dom_ts).catch(() => 9999);
+                    if (idleTime > 2000) {
+                        logTime("✅ [SETTLE] DOM Silence achieved.");
+                        break;
+                    }
+                    await new Promise(r => setTimeout(r, 500));
+                }
+
+                logTime("[SETTLE] Sequence complete. Verifying final state...");
+                continue; // Back to top of loop for second check
+            } else {
+                logTime("✅ UNKNOWN confirmed. Finalizing session.");
+                const state = await getStorageState(page);
+                return { status: "SUCCESS", state };
+            }
+        }
+
+        // We hit an obstacle (Login/OTP), reset settle counter
+        unknownCount = 0; 
+
+        if (status === "LOGIN1_ERR") {
+            const path = await saveDebug(page, "login_err_state");
+            throw new Error(`STRICT FAIL: Login error state detected (LOGIN1_ERR). Evidence: ${path}`);
+        }
+
+        const frame = page.frameLocator(SELECTORS.ONEID_IFRAME);
+        try {
+            switch (status) {
+                case "LOGIN1": {
+                    logTime("[ACTION] LOGIN1: Submitting Email...");
+                    const input = frame.locator(SELECTORS.LOGIN_INPUTS.join(', ')).first();
+                    const btn = frame.locator(SELECTORS.SUBMIT_BUTTON).first();
+                    await input.waitFor({ state: 'visible', timeout: actionTimeout });
+                    await input.fill(process.env.DISNEY_EMAIL);
+                    await btn.click();
+                    break;
+                }
+                case "LOGIN1_PWD": {
+                    logTime("[ACTION] LOGIN1_PWD: Submitting Password...");
+                    const input = frame.locator(SELECTORS.PASSWORD_INPUTS.join(', ')).first();
+                    const btn = frame.locator(SELECTORS.SUBMIT_BUTTON).first();
+                    await input.waitFor({ state: 'visible', timeout: actionTimeout });
+                    await input.fill(process.env.DISNEY_PASSWORD);
+                    await btn.click();
+                    break;
+                }
+                case "LOGIN2": {
+                    logTime("[ACTION] LOGIN2: Submitting Credentials...");
+                    const email = frame.locator(SELECTORS.LOGIN_INPUTS.join(', ')).first();
+                    const pwd = frame.locator(SELECTORS.PASSWORD_INPUTS.join(', ')).first();
+                    const btn = frame.locator(SELECTORS.SUBMIT_BUTTON).first();
+                    if (await email.isVisible({ timeout: 2000 }).catch(() => false)) {
+                        await email.fill(process.env.DISNEY_EMAIL);
+                    }
+                    await pwd.waitFor({ state: 'visible', timeout: actionTimeout });
+                    await pwd.fill(process.env.DISNEY_PASSWORD);
+                    await btn.click();
+                    break;
+                }
+                case "OTP1":
+                case "OTP2": {
+                    logTime(`[ACTION] ${status}: Polling Gmail for OTP...`);
+                    const code = await otpService.poll(actionTimeout * 2); 
+                    const input = frame.locator(SELECTORS.OTP_INPUTS.join(', ')).first();
+                    const btn = frame.locator(SELECTORS.SUBMIT_BUTTON).first();
+                    await input.waitFor({ state: 'visible', timeout: actionTimeout });
+                    await input.fill(code);
+                    await btn.click();
+                    break;
+                }
+                default:
+                    logTime(`[WARN] Unhandled status: ${status}. Waiting...`);
+                    break;
+            }
+        } catch (e) {
+            const path = await saveDebug(page, `action_fail_${status}`);
+            throw new Error(`STRICT FAIL: Action failed for ${status}: ${e.message}. Evidence: ${path}`);
+        }
+        await new Promise(r => setTimeout(r, 5000));
     }
-    
-    const path = await saveDebug(page, "login_final_fail");
-    throw new Error(`STRICT FAIL: Login final check failed. Status: ${finalStatus}, Evidence: ${path}`);
+    const path = await saveDebug(page, "ensure_login_timeout");
+    throw new Error(`STRICT FAIL: ensureLogin timed out after ${totalTimeout/1000}s. Evidence: ${path}`);
 }
 
 async function verifySession(reservationId) {
     const { browser, page } = await ensureCdpPage();
     try {
-        const result = await ensureLogin(page, reservationId);
+        const result = await ensureLogin(page);
         return result;
     } finally {
         if (browser) await browser.close().catch(() => {});
     }
 }
 
-module.exports = { checkPageStatus, ensureLogin, verifySession };
+module.exports = { checkLoginStatus, ensureLogin, verifySession, getCpuLoad };

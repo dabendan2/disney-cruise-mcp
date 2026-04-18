@@ -1,11 +1,17 @@
 const fs = require('fs');
 const path = require('path');
 
-// Ensure log directory exists
-const LOG_DIR = '/home/ubuntu/.disney-cruise/logs';
-if (!fs.existsSync(LOG_DIR)) {
-    fs.mkdirSync(LOG_DIR, { recursive: true });
-}
+const HOME = process.env.HOME || '/home/ubuntu';
+const BASE_DIR = path.join(HOME, '.disney-cruise');
+const LOG_DIR = path.join(BASE_DIR, 'logs');
+const DEBUG_DIR = path.join(BASE_DIR, 'debug');
+
+// Ensure directories exist
+[LOG_DIR, DEBUG_DIR].forEach(dir => {
+    if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+    }
+});
 
 // Create a unique log file for this session
 const sessionTimestamp = new Date().toISOString().replace(/[:.]/g, '-');
@@ -35,16 +41,21 @@ function logTime(msg) {
 }
 
 /**
- * Saves page state (screenshot and HTML) for debugging.
+ * Saves page state (screenshot and DOM) for debugging.
  */
 async function saveDebug(page, name) {
     try {
         const ts = new Date().toISOString().replace(/[:.]/g, '-');
-        const base = `/home/ubuntu/.hermes/debug/${ts}_${name}`;
+        const filename = `${ts}_${name}`;
+        const base = path.join(DEBUG_DIR, filename);
         
-        await page.screenshot({ path: `${base}.png` }).catch(() => {});
+        // Save screenshot
+        const screenshotPath = `${base}.png`;
+        await page.screenshot({ path: screenshotPath }).catch(() => {});
+        
+        // Save DOM snapshot
         const content = await page.content().catch(() => "Failed to get content");
-        fs.writeFileSync(`${base}.html`, content);
+        fs.writeFileSync(`${base}.DOM.html`, content);
         
         logTime(`[DEBUG] Evidence saved: ${name} at ${base}`);
         return base;
@@ -54,4 +65,4 @@ async function saveDebug(page, name) {
     }
 }
 
-module.exports = { logTime, saveDebug, logFile };
+module.exports = { logTime, saveDebug, logFile, LOG_DIR, DEBUG_DIR };

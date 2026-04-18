@@ -8,12 +8,12 @@ const { withLock } = require('./utils/concurrency');
 const { getActivityDetails, getAllActivityTypes, getMyPlans, getActivityList, addActivity } = require('./automation/activities');
 
 // Export for tests if needed
-const { checkPageStatus, ensureLogin, verifySession } = require('./automation/session');
+const { checkLoginStatus, ensureLogin, verifySession } = require('./automation/session');
 const { navigateUrl } = require('./automation/navigation');
 const { waitForAngular } = require('./browser/stability');
 
 const server = new Server(
-  { name: "disney-cruise-automation", version: "1.9.0" },
+  { name: "disney-cruise-automation", version: "2.0.0" },
   { capabilities: { tools: {} } }
 );
 
@@ -130,7 +130,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 });
 
 module.exports = { 
-  checkPageStatus, 
+  checkLoginStatus, 
   ensureLogin, 
   verifySession,
   navigateUrl, 

@@ -208,19 +208,27 @@ async function getMyPlans() {
     
     try {
         logTime("Phase: Identify Reservation Card...");
-        await page.waitForTimeout(8000); 
+        
+        // OPTIMIZATION: Check if we were redirected to a direct reservation page
+        const currentUrl = page.url();
+        const isDirectPage = /\/\d{8}/.test(currentUrl);
         
         const cardLocator = page.locator('myres-reservation-card, .reservation-card');
-        
-        try {
-            await cardLocator.first().waitFor({ state: 'visible', timeout: 25000 });
-        } catch (e) {
-            logTime("No reservation cards visible. Checking for direct subpage...");
+        let cardExists = false;
+
+        if (isDirectPage) {
+            logTime("[INFO] Redirected to direct reservation page. Skipping card search.");
+        } else {
+            try {
+                await cardLocator.first().waitFor({ state: 'visible', timeout: 15000 });
+                cardExists = await cardLocator.count() > 0;
+            } catch (e) {
+                logTime("No reservation cards visible. Checking for direct subpage...");
+            }
         }
 
         const card = cardLocator.first();
         let metadata = {};
-        const cardExists = await card.count() > 0;
 
         if (cardExists) {
             metadata = await card.evaluate(el => {

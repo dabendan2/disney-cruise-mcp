@@ -75,11 +75,17 @@ async function ensureCdpPage() {
   
   await page.route('**/*', (route) => {
     const url = route.request().url().toLowerCase();
+    // Block heavy media
     const isAsset = url.endsWith('.png') || url.endsWith('.jpg') || url.endsWith('.jpeg') || 
                     url.endsWith('.gif') || url.endsWith('.webp') || url.endsWith('.svg') || 
-                    url.endsWith('.woff') || url.endsWith('.woff2');
+                    url.endsWith('.woff') || url.endsWith('.woff2') || url.endsWith('.mp4');
+    
+    // Block tracking and analytics
     const isJunk = url.includes('analytics') || url.includes('gtm.js') || url.includes('pixel') || 
-                   url.includes('doubleclick') || url.includes('facebook') || url.includes('metrics');
+                   url.includes('doubleclick') || url.includes('facebook') || url.includes('metrics') ||
+                   url.includes('demdex.net') || url.includes('tealium') || url.includes('adobetm') ||
+                   url.includes('clicktale') || url.includes('newrelic') || url.includes('googletagmanager');
+
     if (isAsset || isJunk) return route.abort();
     return route.continue();
   });

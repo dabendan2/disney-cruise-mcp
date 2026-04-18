@@ -1,69 +1,83 @@
 const { ensureCdpPage } = require('../browser/engine');
-const { waitForAngular } = require('../browser/stability');
-const { checkPageStatus, ensureLogin } = require('./session');
+const { checkLoginStatus, ensureLogin } = require('./session');
 const { logTime, saveDebug } = require('../utils/debug');
 
-async function navigateUrl(url, reservationId, waitForSelector = null, timeout = 30000) {
+/**
+ * Universal Navigation with automatic login obstacle clearing.
+ * Follows a loop: goto -> ensureLogin -> validate result.
+ * 
+ * @param {string} url Target URL
+ * @param {string} reservationId Optional reservation ID (passed only for context in logs)
+ * @param {string} waitForSelector Optional selector to wait for after navigation
+ */
+async function navigateUrl(url, reservationId, waitForSelector = null) {
     const { browser, page } = await ensureCdpPage();
+    const actionTimeout = 30000;
+
     try {
         for (let attempt = 1; attempt <= 2; attempt++) {
-            logTime(`Nav Attempt ${attempt}: ${url}`);
-            let status = await checkPageStatus(page, reservationId);
-            if (status === "PAGE_NOT_FOUND_ERROR" || status !== "LOGGED_IN") {
-                logTime("Pre-nav session check failed. Logging in...");
-                await ensureLogin(page, reservationId);
-            }
-            
-            logTime(`Navigating to ${url} (Timeout: ${timeout}ms)...`);
-            // Use provided timeout for navigation, but enforce a minimum for DCL stability
-            const navTimeout = Math.max(timeout, 45000); 
-            
-            await page.goto(url, { waitUntil: "domcontentloaded", timeout: navTimeout }).catch(async (e) => {
-                const path = await saveDebug(page, "nav_goto_error");
-                throw new Error(`STRICT FAIL: Navigation error (${e.message}). Evidence: ${path}`);
-            });
+            logTime(`[NAV] Attempt ${attempt}: Navigating to ${url}`);
 
-            status = await checkPageStatus(page, reservationId);
-            
-            if (status === "PAGE_NOT_FOUND_ERROR") {
-                const path = await saveDebug(page, "post_nav_page_not_found");
-                throw new Error(`STRICT FAIL: DCL 404 Error (Page Not Found) at target URL. Evidence: ${path}`);
+            // 1. Perform Goto
+            try {
+                // Using domcontentloaded as a base signal
+                await page.goto(url, { waitUntil: 'domcontentloaded', timeout: actionTimeout });
+            } catch (e) {
+                if (attempt === 2) {
+                    const path = await saveDebug(page, "nav_goto_fail");
+                    throw new Error(`STRICT FAIL: Navigation to ${url} timed out (30s) on attempt 2. Evidence: ${path}`);
+                }
+                logTime(`[NAV] Goto failed on attempt 1: ${e.message}. Retrying...`);
+                continue;
             }
 
-            if (status !== "LOGGED_IN") {
-                logTime("Session lost. Retrying login...");
-                await ensureLogin(page, reservationId);
-                await page.goto(url, { waitUntil: "domcontentloaded", timeout: navTimeout });
-                status = await checkPageStatus(page, reservationId);
+            // 2. Clear Obstacles (Login/OTP/CPU Stabilization)
+            logTime("[NAV] Running ensureLogin to clear obstacles...");
+            try {
+                // ensureLogin now supports any page and removes obstacles until "login_not_needed"
+                await ensureLogin(page);
+            } catch (e) {
+                if (attempt === 2) throw e;
+                logTime(`[NAV] ensureLogin failed on attempt 1: ${e.message}. Retrying whole flow...`);
+                continue;
             }
 
-            if (status === "LOGGED_IN") {
-                logTime("Logged in successfully. Attempting SPA stabilization...");
-                // Non-strict Angular wait to avoid blocking on slow background calls
-                await waitForAngular(page, 20000).catch(() => {
-                    logTime("⌛ SPA stability check exceeded 20s, proceeding to content check...");
-                });
+            // 3. Final Validation
+            const currentUrl = page.url();
+            const html = await page.content();
+            const status = checkLoginStatus(html);
+            
+            logTime(`[NAV] Validation - URL: ${currentUrl}, Status: ${status}`);
+
+            // Logic: URL should match base target AND status must be login_not_needed
+            const baseTarget = url.split('?')[0].replace(/\/$/, '');
+            const baseCurrent = currentUrl.split('?')[0].replace(/\/$/, '');
+            const isUrlMatch = baseCurrent.includes(baseTarget) || baseTarget.includes(baseCurrent);
+            const isReady = status === "UNKNOWN";
+
+            if (isUrlMatch && isReady) {
+                logTime(`✅ Navigation Successful (Ready State: ${status})`);
                 
                 if (waitForSelector) {
-                    logTime(`Checking for user-specified selector: '${waitForSelector}'...`);
-                    try {
-                        await page.waitForSelector(waitForSelector, { timeout: timeout });
-                        logTime(`✅ Found selector: '${waitForSelector}'`);
-                    } catch (e) {
+                    logTime(`[NAV] Waiting for specific selector: '${waitForSelector}'...`);
+                    await page.waitForSelector(waitForSelector, { timeout: actionTimeout }).catch(async (e) => {
                         const path = await saveDebug(page, "selector_not_found");
-                        throw new Error(`STRICT FAIL: User-specified selector '${waitForSelector}' not found within ${timeout}ms. Evidence: ${path}`);
-                    }
-                } else {
-                    logTime("No specific selector provided. Waiting for general content...");
-                    await page.waitForSelector('app-root, .plans-container, [ng-app]', { timeout: 20000 }).catch(() => {
-                        logTime("⌛ General content selectors not found, assuming page ready.");
+                        throw new Error(`STRICT FAIL: Selector '${waitForSelector}' not found within 30s. Evidence: ${path}`);
                     });
                 }
                 
-                return { browser, page, status: "SUCCESS", url: page.url() };
+                return { browser, page, status: "SUCCESS", url: currentUrl };
             }
+
+            // If we reached here, validation failed
+            if (attempt === 2) {
+                const path = await saveDebug(page, "nav_validation_failed");
+                throw new Error(`STRICT FAIL: Navigation validation failed after 2 attempts. URL Match: ${isUrlMatch}, Status: ${status}. Evidence: ${path}`);
+            }
+
+            logTime("[NAV] Validation failed on attempt 1. Retrying...");
+            await new Promise(r => setTimeout(r, 2000));
         }
-        throw new Error("Navigation retry exhausted.");
     } catch (e) {
         if (browser) await browser.close().catch(() => {});
         throw e;

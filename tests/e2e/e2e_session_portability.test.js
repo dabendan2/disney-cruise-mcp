@@ -1,5 +1,5 @@
 const { verifySession } = require('../../src/index');
-const { getPage } = require('../../src/browser/engine');
+const { ensureCdpPage } = require('../../src/browser/engine');
 const { chromium } = require('playwright-chromium');
 const assert = require('assert');
 
@@ -16,7 +16,7 @@ async function testSessionPortability() {
 
     // Step 0: Ensure we are NOT logged in initially to test the full flow
     console.log("Step 0: Resetting CDP browser state (about:blank + clear cookies)...");
-    const { browser: cdpBrowser, page: cdpPage } = await getPage();
+    const { browser: cdpBrowser, page: cdpPage } = await ensureCdpPage();
     await cdpPage.goto('about:blank');
     await cdpPage.context().clearCookies();
     await cdpBrowser.close();
@@ -85,7 +85,7 @@ async function testSessionPortability() {
             console.log(`✅ SUCCESS: Reservation ID ${reservationId} found in ported session!`);
         } else {
             console.log("❌ FAIL: Reservation ID not found.");
-            const debugPath = `/home/ubuntu/.hermes/debug/portability_fresh_fail_${Date.now()}.png`;
+            const debugPath = `/home/ubuntu/.disney-cruise/debug/portability_fresh_fail_${Date.now()}.png`;
             await page.screenshot({ path: debugPath, fullPage: true });
             console.log(`📸 Screenshot: ${debugPath}`);
         }

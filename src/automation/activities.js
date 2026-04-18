@@ -2,6 +2,12 @@ const { navigateUrl } = require('./navigation');
 const { logTime, saveDebug } = require('../utils/debug');
 const { SELECTORS } = require('../constants');
 const { waitForAngular } = require('../browser/stability');
+const { 
+    isBookingConflict, 
+    determineActivityStatus, 
+    getTargetGuestCount, 
+    SELECTORS: UI_SELECTORS 
+} = require('../utils/ui_logic');
 
 async function getActivityDetails(reservationId, slug, date, activityName) {
     const start = logTime(`=== TASK START: ${activityName} on ${date} ===`);
@@ -29,10 +35,6 @@ async function getActivityDetails(reservationId, slug, date, activityName) {
 
         await card.scrollIntoViewIfNeeded();
         const cardText = await card.innerText();
-        const onlyOneGuest = cardText.includes("Book for 1 Guest only");
-        if (onlyOneGuest) {
-            logTime(`[GET_DETAILS] "Book for 1 Guest only" detected. Will check availability for first guest only.`);
-        }
 
         // REFACTORED STATUS CHECK: Button-first logic
         const btn = card.locator('button, a.btn').filter({ hasText: /Select|Add/i }).first();
@@ -40,8 +42,6 @@ async function getActivityDetails(reservationId, slug, date, activityName) {
 
         if (!isBtnVisible) {
             // If no button, extract the actual reason instead of guessing
-            // Often there's a label like "Sold Out" or "Only available on board"
-            // We capture the bottom area text where the button usually is
             const statusText = await card.locator('.activityCardColRight, .activity-card-button-container').innerText();
             return { 
                 activityName, 
@@ -69,7 +69,7 @@ async function getActivityDetails(reservationId, slug, date, activityName) {
         if (modalOrSlot === 'modal') {
             const guests = page.locator(SELECTORS.GUEST_CHECKBOX);
             const count = await guests.count();
-            const toSelect = onlyOneGuest ? Math.min(1, count) : count;
+            const toSelect = getTargetGuestCount(cardText, count);
 
             for (let i = 0; i < toSelect; i++) { 
                 await guests.nth(i).scrollIntoViewIfNeeded();
@@ -378,10 +378,6 @@ async function addActivity(reservationId, slug, date, activityName, timeSlot) {
         await card.waitFor({ state: 'visible', timeout: 15000 });
         
         const cardText = await card.innerText();
-        const onlyOneGuest = cardText.includes("Book for 1 Guest only");
-        if (onlyOneGuest) {
-            logTime(`[ADD_ACTIVITY] "Book for 1 Guest only" detected. Selecting first guest only.`);
-        }
         
         // 1. Initial Click
         const selectBtn = card.locator('button, a.btn').filter({ hasText: /Select|Add/i }).first();
@@ -391,7 +387,10 @@ async function addActivity(reservationId, slug, date, activityName, timeSlot) {
         await page.waitForSelector('label.btn-checkbox-label', { timeout: 10000 });
         const guests = page.locator('label.btn-checkbox-label');
         const count = await guests.count();
-        const toSelect = onlyOneGuest ? Math.min(1, count) : count;
+        const toSelect = getTargetGuestCount(cardText, count);
+        if (toSelect < count) {
+            logTime(`[ADD_ACTIVITY] Selection restricted to ${toSelect} guest(s) based on card description.`);
+        }
 
         for (let i = 0; i < toSelect; i++) {
             await guests.nth(i).click();
@@ -409,7 +408,29 @@ async function addActivity(reservationId, slug, date, activityName, timeSlot) {
         // 4. Select Slot
         const slot = page.locator('li[role="option"], .option-link, button, .time-slot').filter({ hasText: new RegExp("^" + timeSlot + "$", "i") }).first();
         try {
-            await slot.waitFor({ state: 'visible', timeout: 5000 });
+            await slot.waitFor({ state: 'visible', timeout: 8000 });
+            
+            // Check if slot is disabled (often indicates already booked or conflict)
+            const isDisabled = await slot.evaluate(el => 
+                el.getAttribute('aria-disabled') === 'true' || 
+                el.hasAttribute('disabled') || 
+                el.classList.contains('disabled')
+            );
+            
+            if (isDisabled) {
+                logTime(`[ADD_ACTIVITY] Slot ${timeSlot} is DISABLED. This usually means it is already booked or there is a conflict.`);
+                const cardText = await card.innerText();
+                if (isBookingConflict(cardText)) {
+                    return {
+                        activityName,
+                        timeSlot,
+                        status: "ALREADY_BOOKED",
+                        message: "Slot is disabled. Page indicates a conflict or existing reservation.",
+                        evidence: await saveDebug(page, "already_booked_conflict"),
+                        timing: { total_sec: (Date.now() - start)/1000 }
+                    };
+                }
+            }
         } catch (e) {
             logTime("Slot not visible, attempting JS click on hidden element...");
         }

@@ -2,6 +2,7 @@ const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
 const { chromium } = require('playwright-chromium');
+const { SELECTORS: UI_SELECTORS } = require('../../src/utils/ui_logic');
 
 /**
  * Unit Test: Booking Result Detection Logic
@@ -9,7 +10,7 @@ const { chromium } = require('playwright-chromium');
  * using real HTML samples captured during previous debugging sessions.
  */
 async function runBookingLogicTests() {
-    console.log("🚀 Starting Unit Tests: logic_booking_detection (using real debug samples)...");
+    console.log("🚀 Starting Unit Tests: logic_booking_detection (using real debug samples and shared selectors)...");
 
     const browser = await chromium.launch({ headless: true });
     const page = await browser.newPage();
@@ -21,10 +22,10 @@ async function runBookingLogicTests() {
         const errorHtml = fs.readFileSync(errorSamplePath, 'utf8');
         await page.setContent(errorHtml);
 
-        const errorResult = await page.evaluate(() => {
-            const el = document.querySelector('#warning-messaging-title, .error-message, [role="alert"], .warning-messaging-title');
+        const errorResult = await page.evaluate((selector) => {
+            const el = document.querySelector(selector);
             return el ? el.innerText.trim() : null;
-        });
+        }, UI_SELECTORS.ERROR_MESSAGES);
 
         const expectedError = "We are currently unable to complete your request. Please check availability once on board or try again later.";
         assert.strictEqual(errorResult, expectedError, `Should extract the exact error message. Got: ${errorResult}`);
@@ -36,15 +37,15 @@ async function runBookingLogicTests() {
         const readyHtml = fs.readFileSync(readySamplePath, 'utf8');
         await page.setContent(readyHtml);
 
-        const readyResult = await page.evaluate(() => {
-            const btns = Array.from(document.querySelectorAll('button, .cta-button'));
+        const readyResult = await page.evaluate((selector) => {
+            const btns = Array.from(document.querySelectorAll(selector));
             const saveBtn = btns.find(b => b.innerText.trim() === 'Save');
             const timeSelected = document.querySelector('.option-text')?.innerText.trim();
             return {
                 saveVisible: !!saveBtn,
                 selectedTime: timeSelected
             };
-        });
+        }, UI_SELECTORS.SAVE_BUTTON);
 
         assert.strictEqual(readyResult.saveVisible, true, "Save button should be visible in the DOM");
         assert.strictEqual(readyResult.selectedTime, "8:00 AM", `8:00 AM slot should be selected. Got: ${readyResult.selectedTime}`);

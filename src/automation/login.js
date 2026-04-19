@@ -1,6 +1,6 @@
 const { logTime, saveDebug } = require('../utils/debug');
 const { MailOTP } = require('../utils/otp');
-const { SELECTORS } = require('../constants');
+const { SELECTORS, PATHS } = require('../constants');
 const { checkLoginStatus } = require('../utils/ui_logic');
 const { ensureCdpPage } = require('../browser/engine');
 const { getCpuLoad } = require('../utils/system');

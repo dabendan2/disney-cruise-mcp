@@ -1,6 +1,7 @@
 const { ensureCdpPage } = require('../browser/engine');
 const { checkLoginStatus, ensureLogin } = require('./session');
 const { logTime, saveDebug } = require('../utils/debug');
+const { PATHS } = require('../constants');
 
 /**
  * Universal Navigation with automatic login obstacle clearing.
@@ -61,9 +62,7 @@ async function navigateUrl(url, reservationId, waitForSelector = null) {
                 throw new Error(`STRICT FAIL: 404 Error (Someone Ate the Page!) detected at URL: ${currentUrl}. Please check correctness of your URL, and do not retry again with the same URL. Evidence: ${path}`);
             }
 
-            const baseTarget = url.split('?')[0].replace(/\/$/, '');
-            const baseCurrent = currentUrl.split('?')[0].replace(/\/$/, '');
-            const isUrlMatch = baseCurrent.includes(baseTarget) || baseTarget.includes(baseCurrent);
+            const isUrlMatch = currentUrl.includes(PATHS.RESERVATION_ROOT);
             const isReady = status === "UNKNOWN";
 
             if (isUrlMatch && isReady) {

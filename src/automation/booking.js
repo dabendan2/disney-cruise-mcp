@@ -1,6 +1,6 @@
 const { navigateUrl } = require('./navigation');
 const { logTime, saveDebug } = require('../utils/debug');
-const { SELECTORS } = require('../constants');
+const { SELECTORS, PATHS } = require('../constants');
 const { 
     isBookingConflict, 
     getTargetGuestCount 
@@ -11,7 +11,7 @@ const {
  */
 async function getActivityDetails(reservationId, slug, date, activityName) {
     const start = logTime(`=== TASK START: ${activityName} on ${date} ===`);
-    const targetUrl = `https://disneycruise.disney.go.com/my-disney-cruise/${reservationId}/${slug}/${date}/?ship=DA&port=SIN`;
+    const targetUrl = PATHS.ACTIVITY_CATALOG(reservationId, slug, date);
     
     const navResult = await navigateUrl(targetUrl, reservationId, null);
     const { browser, page } = navResult;
@@ -113,7 +113,7 @@ async function getActivityDetails(reservationId, slug, date, activityName) {
  * Add an activity to the itinerary (booking flow).
  */
 async function addActivity(reservationId, slug, date, activityName, timeSlot) {
-    const { browser, page } = await navigateUrl(`https://disneycruise.disney.go.com/my-disney-cruise/${reservationId}/${slug}/${date}/?ship=DA&port=SIN`, reservationId, null);
+    const { browser, page } = await navigateUrl(PATHS.ACTIVITY_CATALOG(reservationId, slug, date), reservationId, null);
     try {
         const card = page.locator(SELECTORS.ACTIVITY_CARD).filter({ hasText: new RegExp(activityName, "i") }).first();
         await card.waitFor({ state: 'visible', timeout: 15000 });

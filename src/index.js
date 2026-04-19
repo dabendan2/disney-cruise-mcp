@@ -7,8 +7,10 @@ const { withLock } = require('./utils/concurrency');
 const { getActivityDetails, getBookableActivityTypes, getMyPlans, getActivityList, addActivity } = require('./automation/activities');
 const { verifySession } = require('./automation/session');
 
+const pkg = require('../package.json');
+
 const server = new Server(
-  { name: "disney-cruise-automation", version: "2.1.0" },
+  { name: pkg.name, version: pkg.version },
   { capabilities: { tools: {} } }
 );
 

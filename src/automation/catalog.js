@@ -1,12 +1,13 @@
 const { navigateUrl } = require('./navigation');
 const { logTime } = require('../utils/debug');
+const { PATHS } = require('../constants');
 
 /**
  * Get all bookable activity types (slugs) from the 'Add Activities' menu for a specific date.
  * Uses verified precision scrolling and block-level targeting.
  */
 async function getBookableActivityTypes(reservationId, date) {
-    const targetUrl = `https://disneycruise.disney.go.com/my-disney-cruise/my-reservations/${reservationId}/my-plans`;
+    const targetUrl = PATHS.MY_PLANS(reservationId);
     const { browser, page } = await navigateUrl(targetUrl, reservationId, 'body');
     
     try {
@@ -125,7 +126,7 @@ async function getBookableActivityTypes(reservationId, date) {
  * List all activities within a specific category and date.
  */
 async function getActivityList(reservationId, slug, date) {
-    const targetUrl = `https://disneycruise.disney.go.com/my-disney-cruise/${reservationId}/${slug}/${date}/?ship=DA&port=SIN`;
+    const targetUrl = PATHS.ACTIVITY_CATALOG(reservationId, slug, date);
     const { browser, page } = await navigateUrl(targetUrl, reservationId, 'wdpr-activity-card', 60000);
     
     try {

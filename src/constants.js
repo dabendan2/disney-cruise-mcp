@@ -1,7 +1,19 @@
+/**
+ * Disney Cruise Line (DCL) Automation Constants
+ */
+
+const BASE_URL = "https://disneycruise.disney.go.com";
+const RESERVATION_ROOT = `${BASE_URL}/my-disney-cruise`;
+
 module.exports = {
-    URLS: {
-        LOGIN: "https://disneycruise.disney.go.com/login/?appRedirect=%2Fmy-disney-cruise%2Fmy-reservations%2F",
-        RESERVATION_BASE: "/my-disney-cruise/"
+    PATHS: {
+        BASE_URL,
+        RESERVATION_ROOT,
+        LOGIN_URL: `${BASE_URL}/login/?appRedirect=%2Fmy-disney-cruise%2Fmy-reservations%2F`,
+        MY_PLANS: (id) => `${RESERVATION_ROOT}/my-reservations/${id}/my-plans`,
+        // Standard DCL URL structure for activities
+        ACTIVITY_CATALOG: (id, slug, date) => 
+            `${RESERVATION_ROOT}/${id}/${slug}/${date}/?ship=${process.env.SHIP || 'DA'}&port=${process.env.PORT || 'SIN'}`
     },
     SELECTORS: {
         ONEID_IFRAME: '#oneid-iframe',
@@ -30,7 +42,10 @@ module.exports = {
     ERROR_INDICATORS: [
         "Someone Ate the Page!",
         "The page that you are trying to reach does not exist",
-        "Page Not Found"
+        "Page Not Found",
+        "We're Working on It",
+        "system is currently unavailable",
+        "technical difficulties"
     ],
     AUTH_MARKERS: ["Sign Out", "My Account", "My Plans"]
 };

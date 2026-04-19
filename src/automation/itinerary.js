@@ -1,12 +1,13 @@
 const { navigateUrl } = require('./navigation');
 const { logTime, saveDebug } = require('../utils/debug');
 const { waitForAngular } = require('../browser/stability');
+const { PATHS } = require('../constants');
 
 /**
  * Fetch all available reservations for the user.
  */
 async function getReservations() {
-    const targetUrl = `https://disneycruise.disney.go.com/my-disney-cruise/my-reservations/`;
+    const targetUrl = PATHS.RESERVATION_ROOT + '/my-reservations/';
     const { browser, page } = await navigateUrl(targetUrl, null, 'app-root', 60000);
     
     try {
@@ -57,7 +58,7 @@ async function getReservations() {
  * Auto-detect the first reservation and fetch its full itinerary.
  */
 async function getMyPlans() {
-    const dashboardUrl = `https://disneycruise.disney.go.com/my-disney-cruise/my-reservations/`;
+    const dashboardUrl = PATHS.RESERVATION_ROOT + '/my-reservations/';
     
     logTime(`Navigating to dashboard to auto-detect reservation...`);
     const { browser, page } = await navigateUrl(dashboardUrl, null, 'app-root', 60000);

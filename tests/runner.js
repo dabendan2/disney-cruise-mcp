@@ -1,7 +1,6 @@
 const { spawnSync } = require('child_process');
 const path = require('path');
 const fs = require('fs');
-require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 
 /**
  * Recursive file finder for .test.js files

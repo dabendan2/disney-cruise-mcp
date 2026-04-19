@@ -20,12 +20,15 @@ async function getActivityDetails(reservationId, slug, date, activityName) {
         logTime("Phase: Optimized Scan for Activity Card...");
         const card = page.locator(SELECTORS.ACTIVITY_CARD).filter({ hasText: new RegExp(activityName, "i") }).first();
         
+        // Wait for card to be visible
+        await card.waitFor({ state: 'visible', timeout: 15000 }).catch(() => {});
+        
         let found = await card.isVisible().catch(() => false);
         if (!found) {
-            for (let i = 0; i < 6; i++) {
-                await page.evaluate(() => window.scrollBy(0, 1500));
-                await new Promise(r => setTimeout(r, 1500));
-                if (await card.count() > 0 && await card.isVisible().catch(() => false)) {
+            for (let i = 0; i < 4; i++) {
+                await page.evaluate(() => window.scrollBy(0, 1000));
+                await new Promise(r => setTimeout(r, 1000));
+                if (await card.isVisible().catch(() => false)) {
                     found = true;
                     break;
                 }
@@ -43,52 +46,93 @@ async function getActivityDetails(reservationId, slug, date, activityName) {
             return { activityName, date, status: statusText.trim(), timing: { total_sec: (Date.now() - start)/1000 } };
         }
 
-        await btn.click();
+        logTime("[ACTION] Clicking Select/Add button...");
+        await btn.click({ force: true });
         
-        const modalOrSlot = await Promise.race([
-            page.waitForSelector('.book-activity-drawer, .participants-list', { timeout: 35000 }).then(() => 'modal'),
-            page.waitForSelector('button:has-text("Check Availability")', { timeout: 35000 }).then(() => 'check'),
-            page.waitForSelector('li[role="option"]', { timeout: 35000 }).then(() => 'slots')
-        ]).catch(() => 'timeout');
+        logTime("Waiting for booking drawer to stabilize...");
+        // Instead of waiting for a global class, look for the drawer content inside the specific card's book-activity component
+        const bookActivity = card.locator('wdpr-book-activity').first();
+        
+        // Sometimes DCL uses a global overlay, sometimes it's inline. Let's try to find ANY visible participant list.
+        const participantList = page.locator('.participants-list, .book-activity-drawer, wdpr-book-activity >> .drawer-form').filter({ visible: true }).first();
+        
+        try {
+            await participantList.waitFor({ state: 'visible', timeout: 15000 });
+        } catch (e) {
+            logTime("[WARN] Standard drawer not visible. Checking if it needs another click or different selector...");
+            await btn.click({ force: true }).catch(() => {});
+            await page.waitForTimeout(3000);
+        }
 
-        if (modalOrSlot === 'timeout') throw new Error("Interaction timeout after clicking Select.");
-
-        if (modalOrSlot === 'modal' || modalOrSlot === 'check') {
-            logTime("Handling guest selection...");
-            const participants = page.locator('li.participant, label.btn-checkbox-label');
-            const count = await participants.count();
+        logTime("Handling guest selection...");
+        // Use ONLY li.participant to avoid double counting with nested checkboxes
+        const participants = participantList.locator('li.participant');
+        const count = await participants.count();
+        
+        if (count > 0) {
             const toSelect = getTargetGuestCount(cardText, count);
-
-            for (let i = 0; i < toSelect; i++) { 
-                const p = participants.nth(i);
-                await p.scrollIntoViewIfNeeded();
-                const tagName = await p.evaluate(el => el.tagName.toLowerCase());
-                const clickTarget = (tagName === 'label') ? p : p.locator('label, wdpr-radio-button').first();
-                await clickTarget.click({ force: true }); 
-                await new Promise(r => setTimeout(r, 1000)); 
-            }
+            logTime(`Found ${count} guests, selecting ${toSelect}...`);
             
-            const checkBtn = page.locator('button').filter({ hasText: /Check Availability/i }).first();
-            await checkBtn.click({ force: true });
+            for (let i = 0; i < toSelect; i++) {
+                const p = participants.nth(i);
+                // The button[role="checkbox"] is the most reliable target in DCL
+                const checkbox = p.locator('button[role="checkbox"], button.btn-checkbox, wdpr-checkbox button').first();
+                
+                if (await checkbox.count() > 0) {
+                    await checkbox.click({ force: true });
+                } else {
+                    // Fallback to label
+                    await p.locator('label').first().click({ force: true }).catch(() => p.click({ force: true }));
+                }
+                await new Promise(r => setTimeout(r, 800));
+            }
         }
 
+        const actionBtn = page.locator('button').filter({ hasText: /Check Availability|Save/i }).first();
         const timeDropdown = page.locator('button, [role="button"]').filter({ hasText: /Select (a )?Time/i }).first();
-        if (await timeDropdown.isVisible().catch(() => false)) {
-            await timeDropdown.click();
-            await new Promise(r => setTimeout(r, 3000));
+
+        logTime("Waiting for action button to be enabled or time dropdown to appear...");
+        for (let i = 0; i < 15; i++) {
+            if (await timeDropdown.isVisible()) break;
+            
+            const isDisabled = await actionBtn.getAttribute('disabled');
+            const isAriaDisabled = await actionBtn.getAttribute('aria-disabled');
+            
+            if (!isDisabled && isAriaDisabled !== 'true') {
+                logTime("[ACTION] Clicking Check Availability/Save...");
+                await actionBtn.click({ force: true });
+                await new Promise(r => setTimeout(r, 2000));
+            }
+            await new Promise(r => setTimeout(r, 1000));
         }
 
+        if (await timeDropdown.isVisible()) {
+            logTime("[ACTION] Opening Select Time dropdown...");
+            await timeDropdown.click({ force: true });
+            await new Promise(r => setTimeout(r, 2000));
+        }
+
+        logTime("Scanning for time slots...");
         let times = [];
         for (let i = 0; i < 10; i++) {
             times = await page.evaluate(() => {
-                const p = /^(1[0-2]|[1-9]):[0-5][0-9]\s?(AM|PM)$/i;
+                function findInShadows(root, selector) {
+                    let results = Array.from(root.querySelectorAll(selector));
+                    const allElements = root.querySelectorAll('*');
+                    for (const el of allElements) {
+                        if (el.shadowRoot) results = results.concat(findInShadows(el.shadowRoot, selector));
+                    }
+                    return results;
+                }
+                const timeRegex = /^(1[0-2]|[1-9]):[0-5][0-9]\s?(AM|PM)$/i;
                 const voyageRegex = /Voyage Length/i;
-                const elements = Array.from(document.querySelectorAll('li[role="option"], button, span, .time-slot'));
-                const found = elements.map(e => e.innerText.trim()).filter(t => p.test(t) || voyageRegex.test(t));
+                const selectors = 'li[role="option"], button, span, .time-slot, .time, .booking-time';
+                const elements = findInShadows(document, selectors);
+                const found = elements.map(e => (e.innerText || "").trim()).filter(t => timeRegex.test(t) || voyageRegex.test(t));
                 return [...new Set(found)];
             });
             if (times.length > 0) break;
-            await new Promise(r => setTimeout(r, 3000));
+            await new Promise(r => setTimeout(r, 2000));
         }
 
         if (times.length === 0) await saveDebug(page, "no_slots_found", true);
@@ -109,10 +153,8 @@ async function getActivityDetails(reservationId, slug, date, activityName) {
     }
 }
 
-/**
- * Add an activity to the itinerary (booking flow).
- */
 async function addActivity(reservationId, slug, date, activityName, timeSlot) {
+    // Similar refactoring would apply here, but focusing on details for now
     const { browser, page } = await navigateUrl(PATHS.ACTIVITY_CATALOG(reservationId, slug, date), reservationId, null);
     try {
         const card = page.locator(SELECTORS.ACTIVITY_CARD).filter({ hasText: new RegExp(activityName, "i") }).first();
@@ -120,16 +162,14 @@ async function addActivity(reservationId, slug, date, activityName, timeSlot) {
         const cardText = await card.innerText();
         await card.locator(SELECTORS.SELECT_ADD_BUTTON).filter({ hasText: /Select|Add/i }).first().click();
         
-        const participants = page.locator('li.participant, label.btn-checkbox-label');
+        const participants = page.locator('li.participant');
         const toSelect = getTargetGuestCount(cardText, await participants.count());
 
         for (let i = 0; i < toSelect; i++) {
-            const p = participants.nth(i);
-            const tagName = await p.evaluate(el => el.tagName.toLowerCase());
-            const clickTarget = (tagName === 'label') ? p : p.locator('label, wdpr-radio-button').first();
-            await clickTarget.click({ force: true });
+            await participants.nth(i).click({ force: true });
+            await new Promise(r => setTimeout(r, 800));
         }
-        await page.locator('button').filter({ hasText: /Check Availability/i }).first().click();
+        await page.locator('button').filter({ hasText: /Check Availability|Save/i }).first().click();
         await page.waitForTimeout(4000);
         
         const dropdown = page.locator('button, [role="button"]').filter({ hasText: /Select Time/i }).first();

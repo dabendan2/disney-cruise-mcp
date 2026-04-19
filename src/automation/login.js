@@ -86,9 +86,9 @@ async function ensureLogin(page) {
 
         logTime(`[STATE] Current status: ${status}`);
 
-        if (status === "PAGE_ERROR") {
-            const path = await saveDebug(page, "system_page_error");
-            throw new Error(`STRICT FAIL: Disney system error detected (PAGE_ERROR). Evidence: ${path}`);
+        if (status === "PAGE_ERROR_500") {
+            const path = await saveDebug(page, "system_page_error_500");
+            throw new Error(`STRICT FAIL: Disney system error detected (PAGE_ERROR_500). Evidence: ${path}`);
         }
 
         if (status === "PAGE_ERROR_404") {

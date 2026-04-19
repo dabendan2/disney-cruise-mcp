@@ -4,11 +4,11 @@ const { StdioServerTransport } = require("@modelcontextprotocol/sdk/server/stdio
 const { CallToolRequestSchema, ListToolsRequestSchema } = require("@modelcontextprotocol/sdk/types.js");
 
 const { withLock } = require('./utils/concurrency');
-const { getActivityDetails, getAllActivityTypes, getMyPlans, getActivityList, addActivity } = require('./automation/activities');
+const { getActivityDetails, getBookableActivityTypes, getMyPlans, getActivityList, addActivity } = require('./automation/activities');
 const { verifySession } = require('./automation/session');
 
 const server = new Server(
-  { name: "disney-cruise-automation", version: "2.0.0" },
+  { name: "disney-cruise-automation", version: "2.1.0" },
   { capabilities: { tools: {} } }
 );
 
@@ -29,14 +29,15 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       } 
     },
     { 
-      name: "get_all_activity_types", 
-      description: "Navigate to My Plans and get all available activity categories/slugs.", 
+      name: "get_bookable_activity_types", 
+      description: "Navigate to My Plans and get available activity categories/slugs for a specific date.", 
       inputSchema: { 
         type: "object", 
         properties: { 
-          reservationId: { type: "string" } 
+          reservationId: { type: "string" },
+          date: { type: "string", description: "YYYY-MM-DD" }
         }, 
-        required: ["reservationId"] 
+        required: ["reservationId", "date"] 
       } 
     },
     { 
@@ -97,8 +98,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const result = await getActivityDetails(args.reservationId, args.slug, args.date, args.activityName);
         return { content: [{ type: "text", text: JSON.stringify(result) }] };
       }
-      if (name === "get_all_activity_types") {
-        const result = await getAllActivityTypes(args.reservationId);
+      if (name === "get_bookable_activity_types") {
+        const result = await getBookableActivityTypes(args.reservationId, args.date);
         return { content: [{ type: "text", text: JSON.stringify(result) }] };
       }
       if (name === "get_my_plans") {

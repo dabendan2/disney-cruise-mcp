@@ -49,6 +49,12 @@ async function navigateUrl(url, reservationId, waitForSelector = null) {
             
             logTime(`[NAV] Validation - URL: ${currentUrl}, Status: ${status}`);
 
+            // Fail-fast on 500 (As requested:報錯而不重試)
+            if (status === "PAGE_ERROR_500") {
+                const path = await saveDebug(page, "nav_error_500");
+                throw new Error(`STRICT FAIL: 500 Error ("We're Working on It") detected at URL: ${currentUrl}. This specific date/activity is currently unavailable in the backend. Please use 'get_bookable_activity_types' to confirm if this date is actually open for booking before trying again. Evidence: ${path}`);
+            }
+
             // Fail-fast on 404
             if (status === "PAGE_ERROR_404") {
                 const path = await saveDebug(page, "nav_error_404");
@@ -59,15 +65,6 @@ async function navigateUrl(url, reservationId, waitForSelector = null) {
             const baseCurrent = currentUrl.split('?')[0].replace(/\/$/, '');
             const isUrlMatch = baseCurrent.includes(baseTarget) || baseTarget.includes(baseCurrent);
             const isReady = status === "UNKNOWN";
-
-            if (status === "PAGE_ERROR") {
-                logTime(`[NAV] PAGE_ERROR detected on attempt ${attempt}.`);
-                if (attempt === 1) {
-                    logTime("[NAV] Retrying due to PAGE_ERROR...");
-                    await new Promise(r => setTimeout(r, 2000));
-                    continue;
-                }
-            }
 
             if (isUrlMatch && isReady) {
                 logTime(`✅ Navigation Successful (Ready State: ${status})`);

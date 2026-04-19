@@ -18,7 +18,7 @@ function runV2StateTests() {
         { file: 'LOGIN2.DOM.html', expected: 'LOGIN2' },
         { file: 'OTP1.DOM.html', expected: 'OTP1' },
         { file: 'OTP2.html', expected: 'OTP2' },
-        { file: 'PAGE_ERROR.DOM.html', expected: 'PAGE_ERROR' },
+        { file: 'PAGE_ERROR.DOM.html', expected: 'PAGE_ERROR_500' },
         { file: 'activity_list.html', expected: 'UNKNOWN' },
         { file: 'initial_load.html', expected: 'UNKNOWN' }
     ];

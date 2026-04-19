@@ -41,12 +41,13 @@ GMAIL_APP_PASSWORD=*** Gmail 應用程式專用密碼
     }
     ```
 
-### 2. `get_all_activity_types`
-取得該預訂可加購的所有活動類別。
-*   **用途**: 獲取用於後續查詢的類別標籤 (Slug)。
+### 2. `get_bookable_activity_types`
+取得該預訂在特定日期可加購的所有活動類別。
+*   **用途**: 獲取用於後續查詢的類別標籤 (Slug)，具備日期校驗功能，可過濾「下船日」的幽靈連結。
 *   **參數**: 
     *   `reservationId` (字串, 必填): 8位數字編號。
-*   **回傳**: 包含 `type` (中文/英文描述) 與 `slug` (系統代碼，如 `DINE`, `SPA`) 的陣列。
+    *   `date` (字串, 必填): 格式為 `YYYY-MM-DD`。
+*   **回傳**: 包含 `type` 與 `slug` 的陣列，以及 `status` (如 `Available`, `Unavailable`, `Date Not Found`, `No Entry Point`)。
 
 ### 3. `get_activity_list`
 獲取特定類別在指定日期的所有可選項目清單。
@@ -54,13 +55,14 @@ GMAIL_APP_PASSWORD=*** Gmail 應用程式專用密碼
     *   `reservationId` (必填)
     *   `slug` (必填): 活動類別代碼。
     *   `date` (必填): 格式為 `YYYY-MM-DD`。
-*   **回傳**: 該類別下所有項目的名稱、預估價格、地點以及內部的 `productId`。\n\n### 4. `get_activity_details`
+### 4. `get_activity_details`
 針對特定項目進行深度掃描，確認精確的可預訂時段。
 *   **參數**: 
     *   `reservationId`, `slug`, `date`, `activityName` (皆為必填)。
 *   **回傳**: 
-    *   `status`: \"Available\", \"No Slots\", 或 \"Sold Out\"。
-    *   `times`: 目前可選的時間點（如 `[\"6:00 PM\", \"8:15 PM\"]`）。
+    *   `status`: "Available", "No Slots", 或 "Sold Out"。
+    *   `times`: 目前可選的時間點（如 `["6:00 PM", "8:15 PM"]`）。
+*   **異常處理**: 若遇到 **Page Error 500** ("We're Working on It")，系統會立即報錯並指引使用 `get_bookable_activity_types` 確認該日期是否真的可預約。
 
 ### 5. `add_activity`
 新增活動至預訂行程。

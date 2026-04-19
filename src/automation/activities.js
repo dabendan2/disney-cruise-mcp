@@ -4,13 +4,13 @@
  */
 
 const { getReservations, getMyPlans } = require('./itinerary');
-const { getAllActivityTypes, getActivityList } = require('./catalog');
+const { getBookableActivityTypes, getActivityList } = require('./catalog');
 const { getActivityDetails, addActivity } = require('./booking');
 
 module.exports = {
     getReservations,
     getMyPlans,
-    getAllActivityTypes,
+    getBookableActivityTypes,
     getActivityList,
     getActivityDetails,
     addActivity

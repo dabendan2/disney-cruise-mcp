@@ -13,6 +13,8 @@ function runTests() {
     console.log('✅ Basic utils edge cases -> PASSED');
 
     const resDir = path.join(__dirname, '../res');
+    let passed = 0;
+    let failed = 0;
 
     const testCases = [
         { file: 'LOGIN1.DOM.html', expected: 'LOGIN1' },
@@ -20,21 +22,18 @@ function runTests() {
         { file: 'LOGIN1_PWD.DOM.html', expected: 'LOGIN1_PWD' },
         { file: 'LOGIN2.DOM.html', expected: 'LOGIN2' },
         { file: 'OTP1.DOM.html', expected: 'OTP1' },
-        { file: 'OTP2.html', expected: 'OTP2' },
-        { file: 'PAGE_ERROR.DOM.html', expected: 'PAGE_ERROR' },
-        { file: 'PAGE_ERROR_500.html', expected: 'PAGE_ERROR' },
-        { file: 'activity_list.html', expected: 'UNKNOWN' },
-        { file: 'initial_load.html', expected: 'UNKNOWN' }
+        { file: 'OTP2.DOM.html', expected: 'OTP2' },
+        { file: 'PAGE_ERROR_404.html', expected: 'PAGE_ERROR_404' },
+        { file: 'PAGE_ERROR.DOM.html', expected: 'PAGE_ERROR_500' },
+        { file: 'PAGE_ERROR_500.html', expected: 'PAGE_ERROR_500' },
+        { file: 'NAV_SUCCESS_UNKNOWN.DOM.html', expected: 'UNKNOWN' }
     ];
 
-    let passed = 0;
-    let failed = 0;
-
-    for (const { file, expected } of testCases) {
+    testCases.forEach(({ file, expected }) => {
         const filePath = path.join(resDir, file);
         if (!fs.existsSync(filePath)) {
             console.warn('⚠️ Skip: ' + file + ' not found.');
-            continue;
+            return;
         }
 
         const html = fs.readFileSync(filePath, 'utf8');
@@ -48,7 +47,7 @@ function runTests() {
             console.error('❌ [FAIL] ' + file + ': Expected ' + expected + ', got ' + actual);
             failed++;
         }
-    }
+    });
 
     // Synthetic tests for text-based fallback
     assert.strictEqual(checkLoginStatus('<html><body>Check your email for code</body></html>'), 'OTP1');

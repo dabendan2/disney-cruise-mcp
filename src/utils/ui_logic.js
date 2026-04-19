@@ -8,7 +8,7 @@ function checkLoginStatus(html) {
 
     const $ = cheerio.load(html);
     
-    // Check for PAGE_ERROR before removing script/style
+    // Check for PAGE_ERROR_500 before removing script/style
     const fullTextLower = $('body').text().toLowerCase();
     if (fullTextLower.includes('someone ate the page') || 
         fullTextLower.includes('the page that you are trying to reach does not exist') ||
@@ -21,7 +21,7 @@ function checkLoginStatus(html) {
         fullTextLower.includes("we're working on it") ||
         $('wdpr-system-error[error-code="500"]').length > 0 ||
         $('meta[name="prerender-status-code"][content="500"]').length > 0) {
-        return 'PAGE_ERROR';
+        return 'PAGE_ERROR_500';
     }
 
     $('script, style, template').remove();

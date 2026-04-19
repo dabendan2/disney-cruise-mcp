@@ -13,79 +13,73 @@ async function getActivityDetails(reservationId, slug, date, activityName) {
     const start = logTime(`=== TASK START: ${activityName} on ${date} ===`);
     const targetUrl = `https://disneycruise.disney.go.com/my-disney-cruise/${reservationId}/${slug}/${date}/?ship=DA&port=SIN`;
     
-    const navResult = await navigateUrl(targetUrl, reservationId, SELECTORS.ACTIVITY_CARD);
+    const navResult = await navigateUrl(targetUrl, reservationId, null);
     const { browser, page } = navResult;
+    
     try {
-        logTime("Phase: Scan Activity Card...");
+        logTime("Phase: Optimized Scan for Activity Card...");
         const card = page.locator(SELECTORS.ACTIVITY_CARD).filter({ hasText: new RegExp(activityName, "i") }).first();
         
-        if (!(await card.count())) {
-            for (let i = 0; i < 8; i++) {
-                await page.evaluate(() => window.scrollBy(0, 1000));
-                await new Promise(r => setTimeout(r, 4500));
-                if (await card.isVisible().catch(() => false)) break;
+        let found = await card.isVisible().catch(() => false);
+        if (!found) {
+            for (let i = 0; i < 6; i++) {
+                await page.evaluate(() => window.scrollBy(0, 1500));
+                await new Promise(r => setTimeout(r, 1500));
+                if (await card.count() > 0 && await card.isVisible().catch(() => false)) {
+                    found = true;
+                    break;
+                }
             }
         }
 
-        if (!(await card.count())) {
-            const path = await saveDebug(page, "activity_not_found");
-            throw new Error(`STRICT FAIL: Activity '${activityName}' not found after 8 scrolls. Evidence: ${path}`);
-        }
+        if (!found) throw new Error(`STRICT FAIL: Activity '${activityName}' not found.`);
 
         await card.scrollIntoViewIfNeeded();
         const cardText = await card.innerText();
+        const btn = card.locator(SELECTORS.SELECT_ADD_BUTTON).filter({ hasText: /Select|Add/i }).first();
 
-        const btn = card.locator('button, a.btn').filter({ hasText: /Select|Add/i }).first();
-        const isBtnVisible = await btn.isVisible();
-
-        if (!isBtnVisible) {
-            const statusText = await card.locator('.activityCardColRight, .activity-card-button-container').innerText();
-            return { 
-                activityName, 
-                date, 
-                status: statusText.trim() || "Not Available (No Button)", 
-                timing: { total_sec: (Date.now() - start)/1000 } 
-            };
+        if (!(await btn.isVisible())) {
+            const statusText = await card.locator('.activityCardColRight, .activity-card-button-container').innerText().catch(() => "Not Available");
+            return { activityName, date, status: statusText.trim(), timing: { total_sec: (Date.now() - start)/1000 } };
         }
 
         await btn.click();
         
         const modalOrSlot = await Promise.race([
-            page.waitForSelector(SELECTORS.GUEST_CHECKBOX, { timeout: 35000 }).then(() => 'modal'),
+            page.waitForSelector('.book-activity-drawer, .participants-list', { timeout: 35000 }).then(() => 'modal'),
             page.waitForSelector('button:has-text("Check Availability")', { timeout: 35000 }).then(() => 'check'),
-            page.waitForSelector('li[role="option"]', { timeout: 10000 }).then(() => 'slots')
+            page.waitForSelector('li[role="option"]', { timeout: 35000 }).then(() => 'slots')
         ]).catch(() => 'timeout');
 
-        if (modalOrSlot === 'timeout') {
-            const path = await saveDebug(page, "interaction_timeout");
-            throw new Error(`STRICT FAIL: Interaction timeout after clicking button. Evidence: ${path}`);
-        }
+        if (modalOrSlot === 'timeout') throw new Error("Interaction timeout after clicking Select.");
 
-        if (modalOrSlot === 'modal') {
-            const guests = page.locator(SELECTORS.GUEST_CHECKBOX);
-            const count = await guests.count();
+        if (modalOrSlot === 'modal' || modalOrSlot === 'check') {
+            logTime("Handling guest selection...");
+            const participants = page.locator('li.participant, label.btn-checkbox-label');
+            const count = await participants.count();
             const toSelect = getTargetGuestCount(cardText, count);
 
             for (let i = 0; i < toSelect; i++) { 
-                await guests.nth(i).scrollIntoViewIfNeeded();
-                await guests.nth(i).click(); 
-                await new Promise(r => setTimeout(r, 1200)); 
+                const p = participants.nth(i);
+                await p.scrollIntoViewIfNeeded();
+                const tagName = await p.evaluate(el => el.tagName.toLowerCase());
+                const clickTarget = (tagName === 'label') ? p : p.locator('label, wdpr-radio-button').first();
+                await clickTarget.click({ force: true }); 
+                await new Promise(r => setTimeout(r, 1000)); 
             }
             
             const checkBtn = page.locator('button').filter({ hasText: /Check Availability/i }).first();
-            await checkBtn.evaluate(el => el.removeAttribute('disabled'));
-            await checkBtn.click();
+            await checkBtn.click({ force: true });
         }
 
         const timeDropdown = page.locator('button, [role="button"]').filter({ hasText: /Select (a )?Time/i }).first();
         if (await timeDropdown.isVisible().catch(() => false)) {
-            logTime("Hydrating slots via dropdown...");
             await timeDropdown.click();
-            await new Promise(r => setTimeout(r, 4000));
+            await new Promise(r => setTimeout(r, 3000));
         }
 
         let times = [];
-        for (let i = 0; i < 15; i++) {
+        for (let i = 0; i < 10; i++) {
             times = await page.evaluate(() => {
                 const p = /^(1[0-2]|[1-9]):[0-5][0-9]\s?(AM|PM)$/i;
                 const voyageRegex = /Voyage Length/i;
@@ -94,134 +88,61 @@ async function getActivityDetails(reservationId, slug, date, activityName) {
                 return [...new Set(found)];
             });
             if (times.length > 0) break;
-            await new Promise(r => setTimeout(r, 4500));
+            await new Promise(r => setTimeout(r, 3000));
         }
 
-        const end = logTime(`=== TASK COMPLETE. Found ${times.length} slots ===`);
-        return { activityName, date, status: times.length > 0 ? "Available" : "No Slots", times, timing: { total_sec: (end - start)/1000 } };
+        if (times.length === 0) await saveDebug(page, "no_slots_found", true);
+        
+        return { 
+            activityName, 
+            date, 
+            status: times.length > 0 ? "Available" : "No Slots", 
+            times, 
+            timing: { total_sec: (Date.now() - start)/1000 } 
+        };
+
     } catch (e) {
-        if (!e.message.includes("STRICT FAIL")) {
-            const path = await saveDebug(page, "unhandled_task_error");
-            throw new Error(`STRICT FAIL: Unhandled error in getActivityDetails: ${e.message}. Evidence: ${path}`);
-        }
-        throw e;
-    } finally { if (browser) await browser.close(); }
+        const path = await saveDebug(page, "task_error");
+        throw new Error(`STRICT FAIL: ${e.message}. Evidence: ${path}`);
+    } finally { 
+        if (browser) await browser.close(); 
+    }
 }
 
 /**
  * Add an activity to the itinerary (booking flow).
  */
 async function addActivity(reservationId, slug, date, activityName, timeSlot) {
-    const start = Date.now();
-    const targetUrl = `https://disneycruise.disney.go.com/my-disney-cruise/${reservationId}/${slug}/${date}/?ship=DA&port=SIN`;
-    
-    const { browser, page } = await navigateUrl(targetUrl, reservationId, 'wdpr-activity-card', 45000);
-    
+    const { browser, page } = await navigateUrl(`https://disneycruise.disney.go.com/my-disney-cruise/${reservationId}/${slug}/${date}/?ship=DA&port=SIN`, reservationId, null);
     try {
-        logTime(`[ADD_ACTIVITY] Starting for: ${activityName} at ${timeSlot}`);
-
-        const card = page.locator('wdpr-activity-card').filter({ hasText: new RegExp(activityName, "i") }).first();
+        const card = page.locator(SELECTORS.ACTIVITY_CARD).filter({ hasText: new RegExp(activityName, "i") }).first();
         await card.waitFor({ state: 'visible', timeout: 15000 });
-        
         const cardText = await card.innerText();
+        await card.locator(SELECTORS.SELECT_ADD_BUTTON).filter({ hasText: /Select|Add/i }).first().click();
         
-        const selectBtn = card.locator('button, a.btn').filter({ hasText: /Select|Add/i }).first();
-        await selectBtn.click();
-        
-        await page.waitForSelector('label.btn-checkbox-label', { timeout: 10000 });
-        const guests = page.locator('label.btn-checkbox-label');
-        const count = await guests.count();
-        const toSelect = getTargetGuestCount(cardText, count);
+        const participants = page.locator('li.participant, label.btn-checkbox-label');
+        const toSelect = getTargetGuestCount(cardText, await participants.count());
 
         for (let i = 0; i < toSelect; i++) {
-            await guests.nth(i).click();
+            const p = participants.nth(i);
+            const tagName = await p.evaluate(el => el.tagName.toLowerCase());
+            const clickTarget = (tagName === 'label') ? p : p.locator('label, wdpr-radio-button').first();
+            await clickTarget.click({ force: true });
         }
         await page.locator('button').filter({ hasText: /Check Availability/i }).first().click();
+        await page.waitForTimeout(4000);
+        
+        const dropdown = page.locator('button, [role="button"]').filter({ hasText: /Select Time/i }).first();
+        if (await dropdown.isVisible().catch(() => false)) await dropdown.click();
+        
+        const slot = page.locator('li[role="option"], .time-slot').filter({ hasText: new RegExp("^" + timeSlot + "$", "i") }).first();
+        await slot.click({ force: true });
+        
+        const saveBtn = card.locator(SELECTORS.SAVE_BUTTON).filter({ hasText: /Save/i }).first();
+        await saveBtn.click({ force: true });
         
         await page.waitForTimeout(6000);
-        const postCheckText = await card.innerText();
-        if (isBookingConflict(postCheckText)) {
-            return {
-                activityName,
-                timeSlot,
-                status: "ALREADY_BOOKED",
-                message: "Activity is already booked or has a conflict.",
-                evidence: await saveDebug(page, "already_booked_immediate"),
-                timing: { total_sec: (Date.now() - start)/1000 }
-            };
-        }
-        
-        const dropdown = page.locator('button, [role="button"], .dropdown-toggle').filter({ hasText: /Select Time/i }).first();
-        if (await dropdown.isVisible({ timeout: 5000 }).catch(() => false)) {
-            await dropdown.click().catch(async () => {
-                await dropdown.evaluate(el => el.click());
-            });
-            await page.waitForTimeout(3000); 
-        }
-        
-        const slot = page.locator('li[role="option"], .option-link, button, .time-slot').filter({ hasText: new RegExp("^" + timeSlot + "$", "i") }).first();
-        try {
-            await slot.waitFor({ state: 'visible', timeout: 8000 });
-            
-            const isDisabled = await slot.evaluate(el => 
-                el.getAttribute('aria-disabled') === 'true' || 
-                el.hasAttribute('disabled') || 
-                el.classList.contains('disabled')
-            );
-            
-            if (isDisabled) {
-                const cardText = await card.innerText();
-                if (isBookingConflict(cardText)) {
-                    return {
-                        activityName,
-                        timeSlot,
-                        status: "ALREADY_BOOKED",
-                        message: "Slot is disabled. Page indicates a conflict or existing reservation.",
-                        evidence: await saveDebug(page, "already_booked_conflict"),
-                        timing: { total_sec: (Date.now() - start)/1000 }
-                    };
-                }
-            }
-            
-            await slot.click().catch(async () => {
-                await slot.evaluate(el => el.click());
-            });
-            await page.waitForTimeout(2000);
-        } catch (e) {
-            await page.evaluate((ts) => {
-                const elements = Array.from(document.querySelectorAll('li[role="option"], .option-link, button, span'));
-                const found = elements.find(el => el.innerText.trim().toLowerCase() === ts.toLowerCase());
-                if (found) found.click();
-            }, timeSlot);
-            await page.waitForTimeout(2000);
-        }
-        
-        logTime("Attempting to click SAVE...");
-        await card.scrollIntoViewIfNeeded();
-        const saveBtn = card.locator('button, .cta-button, a.btn').filter({ hasText: /Save/i }).first();
-        
-        try {
-            await saveBtn.waitFor({ state: 'visible', timeout: 10000 });
-            for (let i = 0; i < 5; i++) {
-                const isEnabled = await saveBtn.evaluate(el => !el.hasAttribute('disabled') && !el.classList.contains('disabled'));
-                if (isEnabled) break;
-                await page.waitForTimeout(2000);
-            }
-            await saveBtn.click({ timeout: 5000 });
-        } catch (e) {
-            await page.evaluate((activityName) => {
-                const card = Array.from(document.querySelectorAll('wdpr-activity-card')).find(c => c.innerText.toLowerCase().includes(activityName.toLowerCase()));
-                if (card) {
-                    const save = Array.from(card.querySelectorAll('button, .cta-button, a.btn')).find(b => b.innerText.toLowerCase().includes('save'));
-                    if (save) save.click();
-                }
-            }, activityName);
-        }
-
-        await page.waitForTimeout(8000);
-        const finalPath = await saveDebug(page, "booking_final_check");
-        return { activityName, timeSlot, status: "SUCCESS", evidence: finalPath, timing: { total_sec: (Date.now() - start)/1000 } };
-
+        return { activityName, timeSlot, status: "SUCCESS", evidence: await saveDebug(page, "booking_done") };
     } finally { if (browser) await browser.close(); }
 }
 

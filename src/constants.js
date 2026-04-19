@@ -22,7 +22,7 @@ module.exports = {
             '.error',
             '#error'
         ].join(', '),
-        GUEST_CHECKBOX: 'label.btn-checkbox-label',
+        GUEST_CHECKBOX: 'li.participant, .participant-item, .participant',
         ACTIVITY_CARD: 'wdpr-activity-card',
         SAVE_BUTTON: 'button, .cta-button',
         SELECT_ADD_BUTTON: 'button, a.btn'

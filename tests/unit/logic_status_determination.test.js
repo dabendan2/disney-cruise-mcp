@@ -22,6 +22,7 @@ function runTests() {
         { file: 'OTP1.DOM.html', expected: 'OTP1' },
         { file: 'OTP2.html', expected: 'OTP2' },
         { file: 'PAGE_ERROR.DOM.html', expected: 'PAGE_ERROR' },
+        { file: 'PAGE_ERROR_500.html', expected: 'PAGE_ERROR' },
         { file: 'activity_list.html', expected: 'UNKNOWN' },
         { file: 'initial_load.html', expected: 'UNKNOWN' }
     ];

@@ -8,10 +8,19 @@ function checkLoginStatus(html) {
 
     const $ = cheerio.load(html);
     
-    const bodyText = $('body').text();
-    if (bodyText.includes('unable to retrieve any reservation information') || 
-        bodyText.includes('system is currently unavailable') ||
-        bodyText.includes('technical difficulties')) {
+    // Check for PAGE_ERROR before removing script/style
+    const fullTextLower = $('body').text().toLowerCase();
+    if (fullTextLower.includes('someone ate the page') || 
+        fullTextLower.includes('the page that you are trying to reach does not exist') ||
+        $('meta[name="prerender-status-code"][content="404"]').length > 0) {
+        return 'PAGE_ERROR_404';
+    }
+    if (fullTextLower.includes('unable to retrieve any reservation information') || 
+        fullTextLower.includes('system is currently unavailable') ||
+        fullTextLower.includes('technical difficulties') ||
+        fullTextLower.includes("we're working on it") ||
+        $('wdpr-system-error[error-code="500"]').length > 0 ||
+        $('meta[name="prerender-status-code"][content="500"]').length > 0) {
         return 'PAGE_ERROR';
     }
 

@@ -34,7 +34,7 @@ async function getStorageState(page) {
         try {
             results.push({ 
                 origin: window.location.origin, 
-                localStorage: { ...localStorage },
+                localStorage: { ...localStorage }, 
                 sessionStorage: { ...sessionStorage }
             });
         } catch (e) {}
@@ -91,6 +91,11 @@ async function ensureLogin(page) {
             throw new Error(`STRICT FAIL: Disney system error detected (PAGE_ERROR). Evidence: ${path}`);
         }
 
+        if (status === "PAGE_ERROR_404") {
+            const path = await saveDebug(page, "nav_error_404");
+            throw new Error(`STRICT FAIL: 404 Error (Someone Ate the Page!) detected at URL: ${page.url()}. Please check correctness of your URL, and do not retry again with the same URL. Evidence: ${path}`);
+        }
+
         if (status === "UNKNOWN") {
             if (unknownCount === 0) {
                 logTime("[STATE] UNKNOWN (Initial Detect). Starting hydration settle sequence...");
@@ -120,8 +125,11 @@ async function ensureLogin(page) {
                     await new Promise(r => setTimeout(r, 500));
                 }
 
-                logTime("[SETTLE] Sequence complete. Verifying final state...");
-                continue;
+                logTime("[SETTLE] Sequence complete. Waiting for loading spinner to hide...");
+                await page.waitForSelector('wdpr-loading-spinner', { state: 'hidden', timeout: 30000 }).catch(() => {});
+                
+                logTime("[SETTLE] Final verification...");
+                continue; // Re-evaluate status after spinner and settle
             } else {
                 logTime("✅ UNKNOWN confirmed. Finalizing session.");
                 const state = await getStorageState(page);

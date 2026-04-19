@@ -49,14 +49,33 @@ async function navigateUrl(url, reservationId, waitForSelector = null) {
             
             logTime(`[NAV] Validation - URL: ${currentUrl}, Status: ${status}`);
 
-            // Logic: URL should match base target AND status must be login_not_needed
+            // Fail-fast on 404
+            if (status === "PAGE_ERROR_404") {
+                const path = await saveDebug(page, "nav_error_404");
+                throw new Error(`STRICT FAIL: 404 Error (Someone Ate the Page!) detected at URL: ${currentUrl}. Please check correctness of your URL, and do not retry again with the same URL. Evidence: ${path}`);
+            }
+
             const baseTarget = url.split('?')[0].replace(/\/$/, '');
             const baseCurrent = currentUrl.split('?')[0].replace(/\/$/, '');
             const isUrlMatch = baseCurrent.includes(baseTarget) || baseTarget.includes(baseCurrent);
             const isReady = status === "UNKNOWN";
 
+            if (status === "PAGE_ERROR") {
+                logTime(`[NAV] PAGE_ERROR detected on attempt ${attempt}.`);
+                if (attempt === 1) {
+                    logTime("[NAV] Retrying due to PAGE_ERROR...");
+                    await new Promise(r => setTimeout(r, 2000));
+                    continue;
+                }
+            }
+
             if (isUrlMatch && isReady) {
                 logTime(`✅ Navigation Successful (Ready State: ${status})`);
+                
+                // Save evidence for UNKNOWN success to help debug "blank page" successes
+                if (status === "UNKNOWN") {
+                    await saveDebug(page, "nav_success_unknown", true);
+                }
                 
                 if (waitForSelector) {
                     logTime(`[NAV] Waiting for specific selector: '${waitForSelector}'...`);

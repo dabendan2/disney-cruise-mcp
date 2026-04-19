@@ -37,6 +37,12 @@ function checkLoginStatus(html) {
         return 'OTP1';
     }
 
+    if (visibleText.includes('Choose a new MyDisney password') || 
+        visibleText.includes('Choose a new password') ||
+        visibleText.includes('Your password must be changed')) {
+        return 'PASSWORD_CHANGE_NEEDED';
+    }
+
     if (hasEmail && hasPassword) return 'LOGIN2';
     if (hasPassword) return 'LOGIN1_PWD';
     
@@ -83,5 +89,12 @@ module.exports = {
         if (!cardText) return totalGuests;
         const onlyOneGuest = cardText.includes('Book for 1 Guest only');
         return onlyOneGuest ? Math.min(1, totalGuests) : totalGuests;
+    },
+    /**
+     * Cleans guest names by removing age indicators and excess whitespace.
+     */
+    cleanGuestName: (rawName) => {
+        if (!rawName) return "";
+        return rawName.replace(/Age\s*\d+\+?|Infant/gi, '').replace(/\s+/g, ' ').trim();
     }
 };

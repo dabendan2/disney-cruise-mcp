@@ -70,10 +70,11 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
         type: "object", 
         properties: { 
           reservationId: { type: "string" },
-          slug: { type: "string" },
-          date: { type: "string" },
-          activityName: { type: "string" },
-          timeSlot: { type: "string" }
+          slug: { type: "string" }, 
+          date: { type: "string" }, 
+          activityName: { type: "string" }, 
+          timeSlot: { type: "string" },
+          guestName: { type: "string", description: "Optional: Name of the guest to book for. If omitted, all eligible guests will be selected. Note: If the activity only allows one guest (Radio Button UI), this field is MANDATORY." }
         }, 
         required: ["reservationId", "slug", "date", "activityName", "timeSlot"] 
       } 
@@ -113,7 +114,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         return { content: [{ type: "text", text: JSON.stringify(result) }] };
       }
       if (name === "add_activity") {
-        const result = await addActivity(args.reservationId, args.slug, args.date, args.activityName, args.timeSlot);
+        const result = await addActivity(args.reservationId, args.slug, args.date, args.activityName, args.timeSlot, args.guestName);
         return { content: [{ type: "text", text: JSON.stringify(result) }] };
       }
       if (name === "ensure_login") {

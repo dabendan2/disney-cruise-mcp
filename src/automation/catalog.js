@@ -1,6 +1,7 @@
 const { navigateUrl } = require('./navigation');
-const { logTime } = require('../utils/debug');
+const { logTime, saveDebug } = require('../utils/debug');
 const { PATHS } = require('../constants');
+const { waitForSpinner, robustClick } = require('./ui_utils');
 
 /**
  * Get all bookable activity types (slugs) from the 'Add Activities' menu for a specific date.
@@ -11,64 +12,72 @@ async function getBookableActivityTypes(reservationId, date) {
     const { browser, page } = await navigateUrl(targetUrl, reservationId, 'body');
     
     try {
+        logTime(`[CATALOG] Waiting for SPA hydration before scanning...`);
+        await waitForSpinner(page, 45000);
+        
         const dateObj = new Date(date);
         const month = dateObj.toLocaleString('en-US', { month: 'long' });
         const dayNum = dateObj.getDate();
+        // DCL usually shows "Month Day" in the header
         const dateString = `${month} ${dayNum}`;
         
         logTime(`[CATALOG] Targeting precision block for: ${dateString} (${date})`);
 
-        // Step 1: Precise Scroll to the Day Block
-        const found = await page.evaluate(async (dStr) => {
-            const findDayHeader = () => Array.from(document.querySelectorAll('h2, h3, .itinerary-day-header, .day-label, p'))
-                                             .find(el => el.innerText.includes(dStr) && el.offsetParent !== null);
-            
-            for (let i = 0; i < 20; i++) {
-                const header = findDayHeader();
-                if (header) {
-                    const block = header.closest('day-view, .itinerary-day, .day-container, section');
-                    if (block) {
-                        block.scrollIntoView({ block: 'center' });
-                        return true;
-                    }
-                }
-                window.scrollBy(0, 1000);
-                await new Promise(r => setTimeout(r, 1000));
-            }
-            return false;
-        }, dateString);
+        // Step 1: Find the specific day-view block by checking its header text
+        const dayBlock = page.locator('day-view, .itinerary-day').filter({
+            has: page.locator('.day-view-header p, .day-view-header h2, .itinerary-day-header, h2, h3').filter({ hasText: new RegExp(dateString, "i") })
+        }).first();
 
-        if (!found) {
-            logTime(`[CATALOG] Day ${dateString} not found in itinerary.`);
+        const exists = await dayBlock.count() > 0;
+        if (!exists) {
+            logTime(`[CATALOG] Day block for ${dateString} not found.`);
+            await saveDebug(page, `day_not_found_${date}`);
             return { date, activities: [], status: "Date Not Found" };
         }
 
-        // Step 2: Click button ONLY within that specific day block
-        const clicked = await page.evaluate((dStr) => {
-            const containers = Array.from(document.querySelectorAll('day-view, .itinerary-day, .day-container, section'));
-            const dayBlock = containers.find(el => el.innerText.includes(dStr));
-            if (dayBlock) {
-                const btn = Array.from(dayBlock.querySelectorAll('a, button, [role="button"]'))
-                                 .find(el => el.innerText.includes('Add Activities'));
-                if (btn) {
-                    btn.click();
-                    return true;
+        // Step 2: Precise Scroll to the target day block
+        logTime(`[CATALOG] Scrolling to ${dateString}...`);
+        await dayBlock.scrollIntoViewIfNeeded({ timeout: 15000 });
+        await page.evaluate(() => window.scrollBy(0, -150)); // Clear sticky header
+
+        // Step 3: Locate and click "Add Activities" button WITHIN that specific block
+        const addBtn = dayBlock.locator('a, button, [role="button"]').filter({ hasText: /Add Activities/i }).first();
+        
+        const btnVisible = await addBtn.isVisible();
+        if (btnVisible) {
+            logTime(`[CATALOG] Clicking 'Add Activities' for ${date} (Strict Scoped).`);
+            await robustClick(page, addBtn, `AddBtn_${date}`);
+            
+            // Wait for activity menu container
+            const menuSelector = '.add-plans-modal:not([aria-hidden="true"]), .popover:not([aria-hidden="true"]), .wdpr-popover:not([aria-hidden="true"])';
+            let menuVisible = false;
+            for (let i = 0; i < 6; i++) {
+                menuVisible = await page.locator(menuSelector).isVisible();
+                if (menuVisible) {
+                    logTime(`[CATALOG] Activity menu visible for ${date}. Capturing evidence.`);
+                    await saveDebug(page, `menu_open_${date}`);
+                    break;
+                }
+                await page.waitForTimeout(2000);
+                if (i === 3) {
+                    logTime(`[WARN] Menu not visible, retrying scoped click...`);
+                    await robustClick(page, addBtn, `AddBtn_Retry_${date}`);
                 }
             }
-            return false;
-        }, dateString);
 
-        if (clicked) {
-            logTime(`[CATALOG] Clicked 'Add Activities' for ${date}. Waiting for menu...`);
-            await page.waitForTimeout(4000);
+            if (!menuVisible) {
+                logTime(`[ERROR] Activity menu failed to appear for ${date}.`);
+                await saveDebug(page, `menu_fail_${date}`);
+                return { date, activities: [], status: "Menu Not Opened" };
+            }
         } else {
+            logTime(`[CATALOG] 'Add Activities' button not available for ${date}.`);
             return { date, activities: [], status: "No Entry Point" };
         }
 
-        // Step 3: Extract activities with VERIFIED DCL STRUCTURE
+        // Step 4: Extract activities from the menu
         const activities = await page.evaluate((targetDate) => {
             const results = [];
-            // Target the active popover/modal
             const container = document.querySelector('.add-plans-modal:not([aria-hidden="true"]), .popover:not([aria-hidden="true"]), .wdpr-popover:not([aria-hidden="true"])');
             if (!container) return [];
 
@@ -82,18 +91,13 @@ async function getBookableActivityTypes(reservationId, date) {
                 text = text.replace(/[^\x20-\x7E\u4e00-\u9fa5]/g, '').trim();
                 if (text.length < 2) return;
 
-                // CRITICAL FIX: Direct structure check based on Real DOM comparison
-                // 1. Is there a row-enabled container?
                 const enabledDiv = row.querySelector('.row-enabled');
-                // 2. Is there an anchor tag?
                 const anchor = row.querySelector('a.row-anchor');
-                // 3. Does the anchor contain the CORRECT DATE in its URL?
                 const href = anchor ? anchor.getAttribute('href') : null;
                 const dateMatches = href && href.includes(targetDate);
                 
                 // Final Availability Rule:
                 // Must have enabledDiv AND anchor AND the date in the URL must match our target date.
-                // If it's 4/27 but the URL is 4/23, it's a "ghost link" and should be considered Unavailable.
                 const isActuallyAvailable = enabledDiv !== null && anchor !== null && dateMatches;
 
                 let slug = "UNKNOWN";
@@ -108,7 +112,8 @@ async function getBookableActivityTypes(reservationId, date) {
                     results.push({ 
                         type: text, 
                         slug, 
-                        status: isActuallyAvailable ? "Available" : "Unavailable" 
+                        status: isActuallyAvailable ? "Available" : "Unavailable",
+                        debug: { enabled: enabledDiv !== null, hasAnchor: anchor !== null, dateMatches, href }
                     });
                 }
             });

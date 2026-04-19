@@ -88,7 +88,7 @@ async function ensureLogin(page) {
 
         if (status === "PAGE_ERROR_500") {
             const path = await saveDebug(page, "system_page_error_500");
-            throw new Error(`STRICT FAIL: Disney system error detected (PAGE_ERROR_500). Evidence: ${path}`);
+            throw new Error(`STRICT FAIL: Disney system error detected (PAGE_ERROR_500). 這通常是由於query 的url 不合法, 例如錯誤的日期或未開放的活動類別。請檢查get my plans或get bookable activity types,並確保query url 合法性。Evidence: ${path}`);
         }
 
         if (status === "PAGE_ERROR_404") {
@@ -188,6 +188,10 @@ async function ensureLogin(page) {
                     await input.fill(code);
                     await btn.click();
                     break;
+                }
+                case "PASSWORD_CHANGE_NEEDED": {
+                    const path = await saveDebug(page, "password_change_required");
+                    throw new Error(`STRICT FAIL: 您必須手動修改 MyDisney 密碼。迪士尼偵測到安全性問題或密碼過期，請前往官網完成修改後再重新執行。Evidence: ${path}`);
                 }
             }
         } catch (e) {

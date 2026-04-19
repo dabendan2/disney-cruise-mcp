@@ -25,6 +25,23 @@ GMAIL_APP_PASSWORD=*** Gmail 應用程式專用密碼
 *   **查看實時日誌**: `tail -f ~/.disney-cruise/logs/*.log`
 *   **用途**: 用於事後審計、效能分析以及在 MCP 模式下不干擾 JSON 輸出。
 
+### 4. MCP 伺服器配置 (Hermes Agent)
+在 `~/.hermes/config.yaml` 中，請確保使用頂層鍵名 `mcp_servers`，並利用 `-r dotenv/config` 優化環境變數載入：
+```yaml
+mcp_servers:
+  disney-cruise:
+    command: "node"
+    args:
+      - "-r"
+      - "dotenv/config"
+      - "/home/ubuntu/.hermes/mcp/disney-cruise/src/index.js"
+      - "dotenv_config_path=/home/ubuntu/.hermes/mcp/disney-cruise/.env"
+    env:
+      NODE_PATH: "/home/ubuntu/.hermes/mcp/disney-cruise/node_modules"
+      NODE_ENV: "production"
+```
+這可以避免在主要設定檔中暴露敏感的電子郵件與密碼。
+
 ---
 
 ## 🚀 工具列表 (Tools Reference)

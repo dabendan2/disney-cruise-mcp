@@ -28,11 +28,9 @@ async function testActivityDetailsSteakhouse() {
 
             // Validation
             if (tc.expectedStatus === "Available") {
-                assert.ok(result.status === "Available" || result.status === "No Slots", `Date ${tc.date} should be Available or No Slots. Got: ${result.status}`);
-                if (result.status === "Available") {
-                    assert.ok(result.times.length >= tc.minSlots, `Date ${tc.date} should have at least ${tc.minSlots} slots`);
-                }
-                console.log(`✅ Date ${tc.date} verified status: ${result.status}`);
+                assert.strictEqual(result.status, "Available", `Date ${tc.date} should be Available`);
+                assert.ok(result.times.length >= tc.minSlots, `Date ${tc.date} should have at least ${tc.minSlots} slots`);
+                console.log(`✅ Date ${tc.date} matched "Available" status with ${result.times.length} slots.`);
             } else {
                 // For 04-26, it's restricted/onboard
                 assert.ok(result.status.includes("Onboard") || result.status.includes("View More"), 

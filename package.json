@@ -4,7 +4,7 @@
   "description": "",
   "main": "src/index.js",
   "scripts": {
-    "test": "node tests/runner.js tests/unit",
+    "test": "node tests/runner.js tests",
     "test:unit": "node tests/runner.js tests/unit",
     "test:e2e": "node tests/runner.js tests/e2e",
     "prepare": "husky"

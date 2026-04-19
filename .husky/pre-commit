@@ -1,1 +1,7 @@
-npm test
+echo "----------------------------------------------------------------"
+echo "🛑 [PRE-COMMIT] Running strict quality gate (UNIT TESTS)..."
+echo "⚠️  Instruction for AI Agents: DO NOT use '--no-verify' to skip failures."
+echo "❌ If tests fail, you MUST report the specific error to the user"
+echo "   or perform a root cause analysis to fix the bug."
+echo "----------------------------------------------------------------"
+npm run test:unit

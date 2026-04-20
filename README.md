@@ -13,11 +13,9 @@
 ```env
 DISNEY_EMAIL=您的 MyDisney 帳號電子郵件
 DISNEY_PASSWORD=*** MyDisney 帳號密碼
-# 選填：自動化 OTP (配合 MailOTP 功能)
-GMAIL_USER=您的 Gmail 帳號
-GMAIL_APP_PASSWORD=*** Gmail 應用程式專用密碼
 ```
 *   **自動加載**: 伺服器啟動時會自動讀取 `.env`，無需手動 `export` 環境變數。
+*   **自動化 OTP**: 系統目前使用 Google OAuth 憑證 (`~/.hermes/google_token.json`) 進行 Gmail 郵件掃描，不再需要手動配置 Gmail 帳號密碼。請確保已執行 `hermes setup` 完成 Google 授權。
 
 ### 3. 日誌系統 (Logging)
 所有自動化過程的詳細日誌會同步輸出至：
@@ -98,11 +96,18 @@ mcp_servers:
     }
     ```
 
+### 6. `ensure_login`
+驗證登入狀態並回傳當前的 Session 憑證（Cookies）。
+*   **用途**: **外部整合工具**。驗證登入狀態後會回傳加密的 Session 憑證。這允許使用者使用其他通用瀏覽器工具（如 `browser_navigate`）直接存取迪士尼郵輪網域，以支援尚未開發為 MCP 專用工具的功能。
+*   **應用場景**: 例如存取 **Onboard Gifts** (`https://disneycruise.disney.go.com/gifts-and-amenities/`) 進行禮品挑選，或其他需要登入權限的 DCL 專屬頁面。
+*   **參數**: `reservationId` (必填)。
+
 ---
 
 ## 🔄 推薦自動化工作流 (Workflow)
 
 1.  **辨識身分**: 呼叫 `get_my_plans` 取得 ID。
+    *   **優化建議**: 預訂編號與航程日期通常是不變的。代理人應在第一次取得後，將其儲存至 `memory`（例如：「預訂 44079507 的航程為 4/23-4/27」），以避免後續對話或 Session 中重複呼叫 `get_my_plans` 造成額外等待。
 2.  **尋找目標**: 呼叫 `get_activity_list` 找出活動名稱。
 3.  **精確監控**: 針對目標呼叫 `get_activity_details` 獲取時段。
 4.  **執行預訂**: 呼叫 `add_activity`。

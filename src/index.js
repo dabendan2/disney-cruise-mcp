@@ -5,7 +5,7 @@ const { CallToolRequestSchema, ListToolsRequestSchema } = require("@modelcontext
 
 const { withLock } = require('./utils/concurrency');
 const { getActivityDetails, getBookableActivityTypes, getMyPlans, getActivityList, addActivity } = require('./automation/activities');
-const { verifySession } = require('./automation/session');
+const { ensureLogin, verifySession } = require('./automation/session');
 
 const pkg = require('../package.json');
 
@@ -118,7 +118,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         return { content: [{ type: "text", text: JSON.stringify(result) }] };
       }
       if (name === "ensure_login") {
-        const result = await verifySession(args.reservationId);
+        const result = await ensureLogin(args.reservationId);
         return { content: [{ type: "text", text: JSON.stringify(result) }] };
       }
       throw new Error("Tool not found");

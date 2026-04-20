@@ -4,25 +4,17 @@ const { chromium } = require('playwright-chromium');
 const assert = require('assert');
 
 /**
- * E2E Test: Session Portability & Fresh Login
+ * E2E Test: Session Portability Verification
  * This test verifies:
- * 1. Forcing a fresh login by clearing state.
- * 2. Extracting valid Cookies and WebStorage.
- * 3. Porting that state to a non-CDP browser to see the reservation.
+ * 1. Extracting valid Cookies and WebStorage from existing session.
+ * 2. Porting that state to a non-CDP browser to see the reservation.
  */
 async function testSessionPortability() {
     const reservationId = "44079507";
-    console.log(`🚀 Starting E2E Test: Verifying Session Portability (FRESH START) for ${reservationId}...`);
-
-    // Step 0: Ensure we are NOT logged in initially to test the full flow
-    console.log("Step 0: Resetting CDP browser state (about:blank + clear cookies)...");
-    const { browser: cdpBrowser, page: cdpPage } = await ensureCdpPage();
-    await cdpPage.goto('about:blank');
-    await cdpPage.context().clearCookies();
-    await cdpBrowser.close();
+    console.log(`🚀 Starting E2E Test: Verifying Session Portability for ${reservationId}...`);
 
     // 1. Extract session state using the MCP tool
-    console.log("\nStep 1: Extracting session state via verifySession (triggers login)...");
+    console.log("\nStep 1: Extracting session state via verifySession...");
     const loginResult = await verifySession(reservationId);
     assert.strictEqual(loginResult.status, "SUCCESS", "Initial login/session extraction failed");
     

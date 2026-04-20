@@ -20,16 +20,21 @@ function getTestFiles(dir) {
     return results;
 }
 
-const targetDir = process.argv[2] ? path.resolve(process.argv[2]) : path.join(__dirname, 'unit');
+const targetPath = process.argv[2] ? path.resolve(process.argv[2]) : path.join(__dirname, 'unit');
 
-console.log(`🔍 Scanning directory: ${targetDir}`);
-const files = getTestFiles(targetDir);
+console.log(`🔍 Scanning path: ${targetPath}`);
+let files = [];
+if (fs.statSync(targetPath).isDirectory()) {
+    files = getTestFiles(targetPath);
+} else {
+    files = [targetPath];
+}
 console.log(`🔍 Found ${files.length} test suites...\n`);
 
 let passedCount = 0;
 
 files.forEach(fullPath => {
-    const relativePath = path.relative(targetDir, fullPath);
+    const relativePath = path.relative(process.cwd(), fullPath);
     console.log(`Running: ${relativePath}`);
     const result = spawnSync('node', [fullPath], { 
         stdio: 'inherit',

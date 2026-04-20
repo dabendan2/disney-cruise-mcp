@@ -8,6 +8,6 @@ echo "----------------------------------------------------------------"
 # 1. Run Core Unit Tests
 npm run test:unit
 
-# 2. Run Mandatory E2E Essentials
-echo "🔍 Running E2E Essentials Tests..."
-node --env-file=.env tests/runner.js tests/e2e-essentials
+# 2. Run Mandatory E2E
+echo "🔍 Running Full E2E Tests..."
+npm run test:e2e

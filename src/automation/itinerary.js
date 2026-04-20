@@ -80,32 +80,49 @@ async function getMyPlans() {
         }
 
         let metadata = {};
-        if (cardExists) {
-            const card = cardLocator.first();
-            metadata = await card.evaluate(el => {
-                const text = el.innerText;
-                const clean = (t) => t?.replace(/[^\x20-\x7E\u4e00-\u9fa5\n]/g, '').trim() || "";
-                const resIdMatch = text.match(/Reservation\s*#?\s*(\d{8})/i);
-                const stateroomMatch = text.match(/Stateroom\s*(\d+)/i);
-                const title = el.querySelector('.cruise-title, h3, h2, .reservation-title')?.innerText || "";
-                return {
-                    reservationId: resIdMatch ? resIdMatch[1] : null,
-                    stateroom: stateroomMatch ? stateroomMatch[1] : null,
-                    summary: clean(text),
-                    title: clean(title)
-                };
-            });
-        } else {
-            metadata = await page.evaluate((urlId) => {
-                const text = document.body.innerText;
-                const resIdMatch = text.match(/Reservation\s*#?\s*(\d{8})/i);
-                const stateroomMatch = text.match(/Stateroom\s*(\d+)/i);
-                return {
-                    reservationId: resIdMatch ? resIdMatch[1] : urlId,
-                    stateroom: stateroomMatch ? stateroomMatch[1] : null,
-                    summary: "DIRECT_PAGE"
-                };
-            }, urlIdMatch ? urlIdMatch[1] : null);
+        
+        // RETRY LOOP: Wait for the reservation card/ID to appear
+        for (let attempt = 1; attempt <= 3; attempt++) {
+            if (isDirectPage) {
+                logTime("[INFO] On direct reservation page.");
+            }
+
+            const cardLocator = page.locator('myres-reservation-card, .reservation-card');
+            let cardExists = await cardLocator.count() > 0;
+
+            if (cardExists) {
+                const card = cardLocator.first();
+                metadata = await card.evaluate(el => {
+                    const text = el.innerText;
+                    const clean = (t) => t?.replace(/[^\x20-\x7E\u4e00-\u9fa5\n]/g, '').trim() || "";
+                    const resIdMatch = text.match(/Reservation\s*#?\s*(\d{8})/i);
+                    const stateroomMatch = text.match(/Stateroom\s*(\d+)/i);
+                    const title = el.querySelector('.cruise-title, h3, h2, .reservation-title')?.innerText || "";
+                    return {
+                        reservationId: resIdMatch ? resIdMatch[1] : null,
+                        stateroom: stateroomMatch ? stateroomMatch[1] : null,
+                        summary: clean(text),
+                        title: clean(title)
+                    };
+                });
+            } else {
+                metadata = await page.evaluate((urlId) => {
+                    const text = document.body.innerText;
+                    const resIdMatch = text.match(/Reservation\s*#?\s*(\d{8})/i);
+                    const stateroomMatch = text.match(/Stateroom\s*(\d+)/i);
+                    return {
+                        reservationId: resIdMatch ? resIdMatch[1] : urlId,
+                        stateroom: stateroomMatch ? stateroomMatch[1] : null,
+                        summary: "DIRECT_PAGE"
+                    };
+                }, urlIdMatch ? urlIdMatch[1] : null);
+            }
+
+            if (metadata.reservationId) break;
+            
+            logTime(`[RETRY] Reservation ID not found on attempt ${attempt}. Waiting 5s...`);
+            await waitForSpinner(page);
+            await page.waitForTimeout(5000);
         }
 
         const targetId = metadata.reservationId;
@@ -116,7 +133,11 @@ async function getMyPlans() {
 
         logTime(`Reservation ${targetId} identified. Checking for 'My Plans' button...`);
 
-        // Look for \"My Plans\" link/button globally or in card
+        // GUARD: Wait for the page to be actually ready before looking for the button
+        await waitForSpinner(page);
+        await page.waitForTimeout(2000);
+
+        // Look for "My Plans" link/button globally or in card
         const myPlansBtn = page.locator('a, button').filter({ hasText: /My Plans/i }).first();
         
         if (await myPlansBtn.isVisible()) {

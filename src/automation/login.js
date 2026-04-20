@@ -1,11 +1,23 @@
 const { logTime, saveDebug } = require('../utils/debug');
 const { MailOTP } = require('../utils/otp');
-const { SELECTORS, PATHS } = require('../constants');
+const { SELECTORS, PATHS, MODALS } = require('../constants');
 const { checkLoginStatus } = require('../utils/ui_logic');
 const { ensureCdpPage } = require('../browser/engine');
 const { getCpuLoad } = require('../utils/system');
 
 const otpService = new MailOTP();
+
+/**
+ * Global barrier clearing (Modals, etc)
+ */
+async function clearModals(page) {
+    const btn = page.locator(MODALS.CONFIRM_CONTINUE).first();
+    if (await btn.isVisible({ timeout: 2000 }).catch(() => false)) {
+        logTime("[MODAL] Clicking Redirection/Language 'Continue' button...");
+        await btn.click().catch(() => {});
+        await page.waitForTimeout(2000);
+    }
+}
 
 /**
  * Capture full session state (Cookies + Storage)
@@ -47,13 +59,13 @@ async function getStorageState(page) {
 /**
  * Universal State Machine based login process.
  */
-async function ensureLogin(page) {
+async function loginHelper(page) {
     const startTime = Date.now();
     const totalTimeout = 120000;
     const actionTimeout = 30000;
     let unknownCount = 0;
 
-    logTime("🚀 Starting ensureLogin state machine...");
+    logTime("🚀 Starting loginHelper state machine...");
 
     try {
         await page.waitForSelector('main, header, footer, #oneid-wrapper, input', { state: 'attached', timeout: 15000 });
@@ -85,6 +97,9 @@ async function ensureLogin(page) {
         }
 
         logTime(`[STATE] Current status: ${status}`);
+
+        // Barrier Clearing: Handle language/redirection modals
+        await clearModals(page);
 
         if (status === "PAGE_ERROR_500") {
             const path = await saveDebug(page, "system_page_error_500");
@@ -200,17 +215,35 @@ async function ensureLogin(page) {
         }
         await new Promise(r => setTimeout(r, 5000));
     }
-    const path = await saveDebug(page, "ensure_login_timeout");
-    throw new Error(`STRICT FAIL: ensureLogin timed out. Evidence: ${path}`);
+    const path = await saveDebug(page, "login_helper_timeout");
+    throw new Error(`STRICT FAIL: loginHelper timed out. Evidence: ${path}`);
 }
 
-async function verifySession(reservationId) {
+/**
+ * Entry point for ensure_login tool.
+ * Navigates to My Reservations, handles login, and returns cookies.
+ */
+async function ensureLogin(reservationId) {
     const { browser, page } = await ensureCdpPage();
     try {
-        return await ensureLogin(page);
+        logTime("🔗 Navigating to My Reservations...");
+        // Force navigation to ensure cookies are fresh and session is verified at a sensitive endpoint
+        await page.goto(PATHS.MY_RESERVATIONS, { waitUntil: 'domcontentloaded', timeout: 90000 });
+        await page.waitForLoadState('load', { timeout: 30000 }).catch(() => {});
+        
+        const result = await loginHelper(page);
+        if (result.status === "SUCCESS") {
+            logTime("✅ Login verified. Returning session state.");
+            return result; // Return full object { status, state }
+        }
+        return result;
     } finally {
         if (browser) await browser.close().catch(() => {});
     }
 }
 
-module.exports = { ensureLogin, verifySession };
+async function verifySession(reservationId) {
+    return ensureLogin(reservationId);
+}
+
+module.exports = { loginHelper, ensureLogin, verifySession };

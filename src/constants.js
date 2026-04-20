@@ -9,6 +9,7 @@ module.exports = {
     PATHS: {
         BASE_URL,
         RESERVATION_ROOT,
+        MY_RESERVATIONS: `${RESERVATION_ROOT}/my-reservations/`,
         LOGIN_URL: `${BASE_URL}/login/?appRedirect=%2Fmy-disney-cruise%2Fmy-reservations%2F`,
         MY_PLANS: (id) => `${RESERVATION_ROOT}/my-reservations/${id}/my-plans`,
         // Standard DCL URL structure for activities
@@ -17,6 +18,7 @@ module.exports = {
     },
     SELECTORS: {
         ONEID_IFRAME: '#oneid-iframe',
+        LOADING_SPINNER: 'myres-loading-spinner, wdpr-loading-spinner, .loading-spinner, .loading-overlay, .spinner',
         OTP_INPUTS: [
             'input[type="tel"]', 
             'input#InputOTP', 
@@ -47,5 +49,8 @@ module.exports = {
         "system is currently unavailable",
         "technical difficulties"
     ],
+    MODALS: {
+        CONFIRM_CONTINUE: '.confirm-redirection__button, myres-confirm-redirection-modal button',
+    },
     AUTH_MARKERS: ["Sign Out", "My Account", "My Plans"]
 };

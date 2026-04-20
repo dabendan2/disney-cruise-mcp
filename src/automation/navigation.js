@@ -1,5 +1,5 @@
 const { ensureCdpPage } = require('../browser/engine');
-const { checkLoginStatus, ensureLogin } = require('./session');
+const { checkLoginStatus, loginHelper } = require('./session');
 const { logTime, saveDebug } = require('../utils/debug');
 const { PATHS } = require('../constants');
 
@@ -33,13 +33,13 @@ async function navigateUrl(url, reservationId, waitForSelector = null) {
             }
 
             // 2. Clear Obstacles (Login/OTP/CPU Stabilization)
-            logTime("[NAV] Running ensureLogin to clear obstacles...");
+            logTime("[NAV] Running loginHelper to clear obstacles...");
             try {
-                // ensureLogin now supports any page and removes obstacles until "login_not_needed"
-                await ensureLogin(page);
+                // loginHelper now supports any page and removes obstacles until "login_not_needed"
+                await loginHelper(page);
             } catch (e) {
                 if (attempt === 2) throw e;
-                logTime(`[NAV] ensureLogin failed on attempt 1: ${e.message}. Retrying whole flow...`);
+                logTime(`[NAV] loginHelper failed on attempt 1: ${e.message}. Retrying whole flow...`);
                 continue;
             }
 

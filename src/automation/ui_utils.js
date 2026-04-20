@@ -132,11 +132,21 @@ async function selectGuests(page, participantList, isRadio, guestName, targetCou
  * Waits for DCL loading spinners to disappear.
  */
 async function waitForSpinner(page, timeout = 45000) {
-    const spinner = page.locator('wdpr-loading-spinner, .loading-overlay, .spinner');
-    await spinner.waitFor({ state: 'visible', timeout: 3000 }).catch(() => {});
-    await spinner.waitFor({ state: 'hidden', timeout }).catch(() => {
-        logTime("[WARN] Spinner hide timeout exceeded.");
-    });
+    const selector = SELECTORS.LOADING_SPINNER;
+    // Use first() to avoid ambiguity if multiple spinners exist
+    const spinner = page.locator(selector).first();
+    
+    try {
+        // Step 1: Wait for it to potentially appear (short burst)
+        await spinner.waitFor({ state: 'visible', timeout: 5000 }).catch(() => {});
+        
+        // Step 2: If it's visible, wait for it to be hidden
+        if (await spinner.isVisible()) {
+            await spinner.waitFor({ state: 'hidden', timeout });
+        }
+    } catch (e) {
+        logTime(`[WARN] Spinner wait interrupted: ${e.message}`);
+    }
 }
 
 /**

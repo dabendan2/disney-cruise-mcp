@@ -9,13 +9,16 @@
 *   **瀏覽器**: Playwright Chromium (系統自動調用)。
 
 ### 2. 環境變數配置
-在專案根目錄建立 `.env` 檔案，填入以下必要資訊：
+參考 `.env.example` 在專案根目錄建立 `.env` 檔案：
 ```env
 DISNEY_EMAIL=您的 MyDisney 帳號電子郵件
-DISNEY_PASSWORD=*** MyDisney 帳號密碼
+DISNEY_PASSWORD=您的 MyDisney 帳號密碼
+GOOGLE_TOKEN_PATH=/絕對路徑/到/google_token.json
 ```
-*   **自動加載**: 伺服器啟動時會自動讀取 `.env`，無需手動 `export` 環境變數。
-*   **自動化 OTP**: 系統目前使用 Google OAuth 憑證 (`~/.hermes/google_token.json`) 進行 Gmail 郵件掃描，不再需要手動配置 Gmail 帳號密碼。請確保已執行 `hermes setup` 完成 Google 授權。
+*   **自動化 OTP**: 系統使用 Google OAuth 憑證進行 Gmail 郵件掃描。
+    *   **Hermes 使用者**: 執行 `hermes setup` 完成授權，預設路徑為 `~/.hermes/google_token.json`。
+    *   **通用使用者**: 可使用 `google-workspace` 或 `gog cli` 工具獲取授權 Token，並透過 `GOOGLE_TOKEN_PATH` 指定位置。
+*   **航程自定義**: 可選設定 `SHIP` (如 DA) 與 `PORT` (如 SIN) 以對應不同航線。
 
 ### 3. 日誌系統 (Logging)
 所有自動化過程的詳細日誌會同步輸出至：

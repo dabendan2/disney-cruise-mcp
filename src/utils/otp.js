@@ -4,7 +4,7 @@ const { logTime } = require('./debug');
 
 class MailOTP {
     constructor() {
-        this.tokenPath = path.join(process.env.HOME, '.hermes', 'google_token.json');
+        this.tokenPath = process.env.GOOGLE_TOKEN_PATH || path.join(process.env.HOME, '.hermes', 'google_token.json');
         this.creds = null;
         // Disney OTP query pattern from fetch_otp.py
         this.query = 'from:no-reply@my.disney.com subject:"Your one-time passcode" newer_than:2m';

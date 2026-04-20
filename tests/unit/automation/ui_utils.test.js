@@ -8,7 +8,7 @@ const { cleanGuestName } = require('../../../src/utils/ui_logic');
 async function testUiUtils() {
     console.log("🚀 Starting Unit Test: UI Utils & Logic...");
 
-    const fixturePath = path.join(__dirname, '../../res/spa_fitness_slots.html');
+    const fixturePath = path.join(__dirname, '../../fixtures/spa_fitness_slots.html');
     if (!fs.existsSync(fixturePath)) {
         throw new Error(`Fixture not found at ${fixturePath}`);
     }
